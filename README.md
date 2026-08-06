@@ -289,6 +289,51 @@ streamlit run app/web_app.py                                           # Web Dem
 | 问数提示「暂未识别指标」 | 问题中的指标不在 7 个指标/同义词内，换用支持的说法 |
 | LLM 链路报错 | 检查 `.env` 是否配置 `DEEPSEEK_API_KEY`；确定性链路不受影响 |
 
+## Docker Compose 部署（本地）
+
+### 环境要求
+
+- Docker Desktop 或 Docker Engine + Compose Plugin
+- 当前目录存在 `.env`；如果只使用确定性基线，可由 `.env.example` 复制后保留空 Key
+
+### 启动
+
+```bash
+cp -n .env.example .env
+docker compose up --build -d
+docker compose ps
+```
+
+浏览器访问 <http://localhost:8501>。
+
+首次启动会在容器内生成两年虚拟零售数据并初始化 DuckDB，可能需要一段时间；可以用下面的命令查看进度：
+
+```bash
+docker compose logs -f data-agent
+```
+
+### 停止与重启
+
+```bash
+docker compose down
+docker compose up -d
+```
+
+Compose 会持久化：
+
+- `data_agent_data` 命名卷：DuckDB、生成数据和运行期审计日志；
+- `./reports`：宿主机上的 Markdown 报告。
+
+删除容器不会删除命名卷。只有明确执行 `docker compose down -v` 才会删除容器数据，请谨慎操作。
+
+### 配置说明
+
+- `.env` 以只读文件挂载到容器，不会被复制进镜像；应用启动时由现有环境变量加载器解析；
+- `DEEPSEEK_API_KEY` 只在勾选 DeepSeek 问数或报告模式时需要；
+- 可通过 `DATA_AGENT_PORT` 修改宿主机端口，例如 `DATA_AGENT_PORT=8510 docker compose up -d`。
+
+该 Compose 配置面向本地演示和单机验证，不包含多租户权限、高可用、反向代理、TLS、监控和生产级密钥管理。
+
 ---
 
 ## 八、使用示例
@@ -373,6 +418,9 @@ data_agent/
 ├── SPEC.md                    # 需求基线（目标、功能、验收标准）
 ├── requirements.txt
 ├── .env.example               # 环境变量模板（DEEPSEEK_API_KEY）
+├── Dockerfile                 # Web Demo 镜像
+├── docker-compose.yml         # 本地 Compose 编排
+├── docker/entrypoint.sh       # 数据初始化与 Streamlit 启动入口
 ├── configs/
 │   ├── metrics/metrics.json   # 7 个指标口径（唯一来源）
 │   ├── dimensions.json        # 维度取值与别名

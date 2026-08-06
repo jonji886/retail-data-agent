@@ -1,0 +1,28 @@
+services:
+  data-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${DATA_AGENT_PORT:-8501}:8501"
+    environment:
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+    volumes:
+      - data_agent_data:/app/data
+      - ./reports:/app/reports
+      - ./.env:/app/.env:ro
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=4)"
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+
+volumes:
+  data_agent_data:
