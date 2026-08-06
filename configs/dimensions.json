@@ -1,0 +1,36 @@
+{
+  "dimensions": {
+    "region_name": {
+      "display_name": "区域",
+      "group_terms": ["按区域", "各区域", "分区域", "区域排名"],
+      "values": ["华东", "华南", "华北", "西南"]
+    },
+    "city_name": {
+      "display_name": "城市",
+      "group_terms": ["按城市", "各城市", "分城市"],
+      "values": ["上海", "杭州", "广州", "深圳", "北京", "天津", "成都", "重庆"]
+    },
+    "store_name": {
+      "display_name": "门店",
+      "group_terms": ["按门店", "各门店", "分门店", "门店排名"],
+      "values": []
+    },
+    "category_name": {
+      "display_name": "品类",
+      "group_terms": ["按品类", "各品类", "分品类", "按类目", "各类目"],
+      "values": ["食品", "饮料", "日化", "家居", "数码", "生鲜"]
+    },
+    "brand_name": {
+      "display_name": "品牌",
+      "group_terms": ["按品牌", "各品牌", "分品牌"],
+      "values": ["优选", "鲜活", "悦享", "家宜"]
+    },
+    "channel_name": {
+      "display_name": "渠道",
+      "group_terms": ["按渠道", "各渠道", "分渠道"],
+      "values": ["线下门店", "官网", "小程序", "第三方电商"],
+      "aliases": {"线下": "线下门店", "线上": "官网"}
+    }
+  }
+}
+

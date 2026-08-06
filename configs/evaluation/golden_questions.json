@@ -1,0 +1,48 @@
+{
+  "cases": [
+    {
+      "id": "sales_yoy_region",
+      "question": "2025年11月华东区域销售额同比变化",
+      "metric": "sales_amount",
+      "filter": {"region_name": "华东"},
+      "comparison": "yoy",
+      "min_rows": 1
+    },
+    {
+      "id": "sales_by_region",
+      "question": "本月各区域销售额",
+      "metric": "sales_amount",
+      "dimension": "region_name",
+      "min_rows": 4
+    },
+    {
+      "id": "margin_trend",
+      "question": "过去6个月各区域毛利率趋势",
+      "metric": "gross_margin_rate",
+      "dimension": "region_name",
+      "min_rows": 24
+    },
+    {
+      "id": "orders_by_channel",
+      "question": "上个月按渠道统计订单数",
+      "metric": "orders_count",
+      "dimension": "channel_name",
+      "min_rows": 4
+    },
+    {
+      "id": "inventory_by_category",
+      "question": "本月按品类统计库存金额",
+      "metric": "inventory_value",
+      "dimension": "category_name",
+      "min_rows": 6
+    },
+    {
+      "id": "traffic_online",
+      "question": "本月官网客流量",
+      "metric": "traffic",
+      "filter": {"channel_name": "官网"},
+      "min_rows": 1
+    }
+  ]
+}
+

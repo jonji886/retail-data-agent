@@ -1,0 +1,81 @@
+{
+  "metrics": {
+    "sales_amount": {
+      "name": "sales_amount",
+      "display_name": "销售额",
+      "description": "有效订单的实际支付金额，不含取消订单。",
+      "source_table": "v_sales_enriched",
+      "expression": "SUM(sales_amount)",
+      "dimensions": ["region_name", "city_name", "store_id", "store_name", "category_name", "brand_name", "channel_name"],
+      "time_grains": ["day", "week", "month", "quarter"],
+      "synonyms": ["GMV", "成交额", "营业额"],
+      "format": "currency"
+    },
+    "orders_count": {
+      "name": "orders_count",
+      "display_name": "订单数",
+      "description": "支付成功且未取消的订单数量。",
+      "source_table": "v_sales_enriched",
+      "expression": "SUM(order_count)",
+      "dimensions": ["region_name", "city_name", "store_id", "store_name", "category_name", "brand_name", "channel_name"],
+      "time_grains": ["day", "week", "month", "quarter"],
+      "synonyms": ["订单量", "订单数量"],
+      "format": "integer"
+    },
+    "gross_profit": {
+      "name": "gross_profit",
+      "display_name": "毛利额",
+      "description": "销售额减去商品成本金额。",
+      "source_table": "v_sales_enriched",
+      "expression": "SUM(gross_profit)",
+      "dimensions": ["region_name", "city_name", "store_id", "store_name", "category_name", "brand_name", "channel_name"],
+      "time_grains": ["day", "week", "month", "quarter"],
+      "synonyms": ["利润额", "毛利润"],
+      "format": "currency"
+    },
+    "gross_margin_rate": {
+      "name": "gross_margin_rate",
+      "display_name": "毛利率",
+      "description": "毛利额占销售额的比例，按汇总后的毛利额除以销售额计算。",
+      "source_table": "v_sales_enriched",
+      "expression": "SUM(gross_profit) / NULLIF(SUM(sales_amount), 0)",
+      "dimensions": ["region_name", "city_name", "store_id", "store_name", "category_name", "brand_name", "channel_name"],
+      "time_grains": ["day", "week", "month", "quarter"],
+      "synonyms": ["毛利率", "利润率"],
+      "format": "percentage"
+    },
+    "average_order_value": {
+      "name": "average_order_value",
+      "display_name": "客单价",
+      "description": "销售额除以订单数。",
+      "source_table": "v_sales_enriched",
+      "expression": "SUM(sales_amount) / NULLIF(SUM(order_count), 0)",
+      "dimensions": ["region_name", "city_name", "store_id", "store_name", "channel_name"],
+      "time_grains": ["day", "week", "month", "quarter"],
+      "synonyms": ["平均订单金额", "平均客单价"],
+      "format": "currency"
+    },
+    "inventory_value": {
+      "name": "inventory_value",
+      "display_name": "库存金额",
+      "description": "期末库存数量乘以商品单位成本。",
+      "source_table": "v_inventory_enriched",
+      "expression": "SUM(inventory_cost_value)",
+      "dimensions": ["region_name", "city_name", "store_id", "store_name", "category_name", "brand_name"],
+      "time_grains": ["day", "week", "month", "quarter"],
+      "synonyms": ["库存成本", "库存货值"],
+      "format": "currency"
+    },
+    "traffic": {
+      "name": "traffic",
+      "display_name": "客流量",
+      "description": "线下进店人数或线上渠道访问人数。",
+      "source_table": "v_traffic_enriched",
+      "expression": "SUM(visitor_count)",
+      "dimensions": ["region_name", "city_name", "store_id", "store_name", "channel_name"],
+      "time_grains": ["day", "week", "month", "quarter"],
+      "synonyms": ["访客数", "访问人数", "客流"],
+      "format": "integer"
+    }
+  }
+}
