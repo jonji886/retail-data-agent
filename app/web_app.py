@@ -12,6 +12,7 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from app.agent.graph import run_agent
 from app.agent.llm_nlq import DeepSeekNLQEngine
 from app.agent.nlq import NLQError, NaturalLanguageQueryEngine
 from app.analytics.anomaly import SalesAnomalyDetector
@@ -194,6 +195,125 @@ def render_report(settings: Dict[str, str]) -> None:
         st.markdown(st.session_state["report"])
 
 
+def render_agent() -> None:
+    st.subheader("Agent")
+    st.caption("输入经营问题，Agent 自动识别意图并编排 Skill 与 Tool 执行。")
+    examples = [
+        "华东区域 2025 年 11 月销售额是多少？环比怎么样？",
+        "为什么华东区域 11 月销售额下降了？",
+        "2025年11月有哪些销售异常？",
+        "生成 2025年11月 华东 经营分析报告",
+        "过去6个月各区域销售额趋势",
+    ]
+    question = st.text_input("请输入经营问题", value=examples[1])
+    cols = st.columns(3)
+    user_options = {
+        "总部经理 (user_hq)": ("user_hq", "hq_manager", {"scope": "all"}),
+        "华东区域经理 (user_east)": ("user_east", "region_manager", {"scope": "region", "region_name": "华东"}),
+        "门店经理 (user_store_01)": ("user_store_01", "store_manager", {"scope": "store", "store_id": "STORE_001", "store_name": "上海旗舰店1店"}),
+    }
+    user_label = cols[0].selectbox("当前用户（权限）", list(user_options.keys()))
+    use_llm = cols[1].checkbox("使用 LLM（DeepSeek）", value=False)
+    run_btn = cols[2].button("执行 Agent", type="primary")
+    user_id, role, data_scope = user_options[user_label]
+
+    if run_btn:
+        with st.status("Agent 执行中…", expanded=True) as status:
+            status.write("解析意图 → 权限检查 → 执行 Skill → 校验结果 → 生成回答 → 审计")
+            state = run_agent(question, ROOT, user_id=user_id, role=role, data_scope=data_scope, use_llm=use_llm)
+            st.session_state["agent_state"] = state
+            status.update(label="Agent 执行完成", state="complete", expanded=False)
+
+    state = st.session_state.get("agent_state")
+    if state:
+        intent = state.get("intent", "")
+        perm = state.get("permission_decision", "")
+        skill = state.get("current_skill", "")
+        error_type = state.get("error_type")
+        answer = state.get("answer", "")
+        result = state.get("result") or {}
+
+        # 执行过程展示
+        st.markdown("### 执行过程")
+        steps = []
+        if intent:
+            steps.append(("Intent", intent, "✓" if intent != "unsupported" else "✗"))
+        if perm:
+            steps.append(("Permission", perm, "✓" if perm == "allow" else "✗"))
+        if skill:
+            steps.append(("Skill", skill, "✓"))
+        for tc in state.get("tool_calls", []):
+            steps.append(("Tool", tc.get("tool", ""), "✓" if tc.get("status") == "success" else "✗"))
+        if not error_type:
+            steps.append(("Validation", "passed", "✓"))
+        if error_type:
+            steps.append(("Result", error_type, "✗"))
+        elif answer:
+            steps.append(("Answer", "generated", "✓"))
+        for label, value, mark in steps:
+            st.write("%s **%s**：`%s`" % (mark, label, value))
+
+        # 回答
+        if answer:
+            st.markdown("### 回答")
+            st.info(answer)
+
+        # 结果数据
+        if result and isinstance(result, dict) and result.get("rows"):
+            st.markdown("### 结果数据")
+            st.dataframe(result["rows"], width="stretch", hide_index=True)
+
+        # 归因贡献
+        if result and result.get("top_negative"):
+            st.markdown("### 主要负向贡献因素")
+            st.dataframe([
+                {"成员": c.get("member"), "变化额": money(c.get("delta", 0)), "贡献率": percent(c.get("contribution_rate"))}
+                for c in result["top_negative"]
+            ], width="stretch", hide_index=True)
+            st.caption(result.get("limitations", ""))
+
+        # 异常
+        if result and result.get("anomalies"):
+            st.markdown("### 异常预警")
+            st.dataframe([
+                {"等级": a.get("severity", "").upper(), "对象": a.get("entity_name"),
+                 "当前销售额": money(a.get("current_value", 0)), "变化率": percent(a.get("change_rate"))}
+                for a in result["anomalies"]
+            ], width="stretch", hide_index=True)
+
+        # 报告
+        if result and result.get("markdown"):
+            st.markdown("### 生成的报告")
+            st.download_button("下载 Markdown", result["markdown"],
+                               file_name="%s-%s.md" % (result.get("period", "report"), result.get("scope", "all")))
+            st.markdown(result["markdown"])
+
+        # SQL 与口径
+        with st.expander("查看 SQL、指标口径与 Trace"):
+            for tr in state.get("tool_results", []):
+                data = tr.get("data") or {}
+                if isinstance(data, dict) and data.get("sql"):
+                    st.code(data["sql"], language="sql")
+                if isinstance(data, dict) and data.get("comparison_sql"):
+                    st.code(data["comparison_sql"], language="sql")
+            if result.get("metric_definition"):
+                st.write("指标口径：", result["metric_definition"])
+            trace_events = state.get("trace_events", [])
+            if trace_events:
+                st.write("Trace 事件：")
+                st.dataframe([
+                    {"节点": e.get("node"), "状态": e.get("status", ""),
+                     "延迟(ms)": e.get("latency_ms", ""), "trace_id": e.get("trace_id", "")}
+                    for e in trace_events
+                ], width="stretch", hide_index=True)
+            st.caption("request_id: %s | trace_id: %s" % (
+                state.get("request_id", ""), state.get("trace_id", "")))
+
+    st.markdown("### 推荐问题")
+    for item in examples:
+        st.markdown("- %s" % item)
+
+
 def render_quality() -> None:
     st.subheader("质量评测与审计")
     results = run_golden(ROOT)
@@ -231,9 +351,12 @@ def main() -> None:
     settings = render_sidebar()
     st.title("零售经营分析 Data Agent")
     st.caption("把业务问题转化为可解释、可审计、可复用的经营分析结果")
-    overview, ask, alerts, report, quality = st.tabs(["经营总览", "自然语言问数", "预警与归因", "智能报告", "质量评测"])
+    overview, agent_tab, ask, alerts, report, quality = st.tabs(
+        ["经营总览", "Agent", "自然语言问数", "预警与归因", "智能报告", "质量评测"])
     with overview:
         render_overview(settings)
+    with agent_tab:
+        render_agent()
     with ask:
         render_ask()
     with alerts:

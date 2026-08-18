@@ -1,10 +1,31 @@
 # 零售经营分析 Data Agent（优选生活）
 
-> 用中文直接提问经营问题，系统返回**可追溯、可审计、可复用**的分析结果：解析口径 → 生成 SQL → 只读查询 → 结论与引用来源，全程无需人工写 SQL。
+> 用中文直接提问经营问题，Agent 自动识别意图、编排 Skill、经语义层生成只读 SQL、校验结果并审计——全程无需人工写 SQL，LLM 不直接接触数据库。
 
-面向用户：**门店与区域经营负责人、商品/渠道运营、数据分析师**，以及想要学习「AI Agent + 数据仓库 + 语义层」工程落地的开发者。
+```
+Natural Language → LangGraph Agent → Semantic Layer → Governed Tools → Enterprise Data → Evaluation & Audit
+```
 
-项目状态：**本地可运行 MVP **。当前使用虚拟数据，重点展示 Data Agent 的语义建模、质量治理和交付闭环。
+面向用户：**门店与区域经营负责人、商品/渠道运营、数据分析师**，以及想要学习「AI Agent + 语义层 + 数仓 + 权限治理」工程落地的开发者。
+
+项目状态：**本地可运行 MVP（LangGraph 架构升级版）**。当前使用虚拟数据，重点展示 Data Agent 的意图编排、语义建模、权限治理、评测闭环和可审计性。
+
+---
+
+## 核心能力一览
+
+```
+✓ LangGraph Orchestration（StateGraph + 条件路由）
+✓ Semantic Layer（metrics.json 单一口径来源）
+✓ Structured Query Plan（LLM 只生成计划，不生成 SQL）
+✓ RBAC / Data Scope（HQ / Region / Store 三级权限，程序执行）
+✓ Read-only SQL（禁止写操作 / 多语句 / Prompt 注入）
+✓ Tool Contract（统一 ToolResult，输入输出错误明确）
+✓ Skill Layer（metric_query / trend / anomaly / attribution / report）
+✓ Golden Evaluation（35 用例，含 ground truth result 校验）
+✓ Audit / Trace（request_id + trace_id，全节点延迟记录）
+✓ Badcase Regression（发现 → 定位 → 修复 → 回归闭环）
+```
 
 ---
 
@@ -173,54 +194,38 @@ python3 scripts/run_evaluation.py  # 查看评测通过率
 ## 六、系统架构与工作流程
 
 ```mermaid
-flowchart LR
-    subgraph 数据层
-        A[数据生成器<br/>generate_data.py] --> B[CSV]
-        B --> C[(DuckDB<br/>retail.duckdb)]
-        C --> D[宽表视图<br/>v_sales_enriched 等]
-    end
-
-    subgraph 语义层
-        E[指标配置<br/>metrics.json] --> F[语义层 Catalog<br/>catalog.py]
-        F --> G[只读聚合 SQL 生成]
-    end
-
-    subgraph Agent 层
-        H[确定性 NLQ<br/>nlq.py] --> I[查询计划]
-        J[DeepSeek<br/>仅生成查询计划] --> I
-        I --> K[本地校验<br/>指标/维度/过滤/日期]
-        K --> G
-        G --> L[只读执行器<br/>sql_runner.py]
-        L --> M[结果/解释/引用]
-    end
-
-    subgraph 应用层
-        N[Web Demo<br/>streamlit]
-        O[月报生成<br/>generate_report.py]
-        P[评测<br/>run_evaluation.py]
-        Q[预警归因<br/>analyze.py]
-    end
-
-    D --> G
-    M --> N
-    M --> O
-    F --> P
-    D --> Q
-```
-
-### Agent 工作流程（问数链路）
-
-```mermaid
 flowchart TD
-    S[用户中文问题] --> P1[解析:指标/维度/过滤/时间/对比]
-    P1 --> P2{是否识别?}
-    P2 -- 否 --> R1[明确拒答 + 提示支持范围]
-    P2 -- 是 --> P3[语义层生成聚合 SQL]
-    P3 --> P4[只读执行 DuckDB]
-    P4 --> P5[结果校验与解释]
-    P5 --> P6[输出:数据/结论/SQL/口径引用]
-    P6 --> P7[审计日志 + Badcase 记录]
+    U[用户中文问题] --> AGENT[LangGraph Agent Runtime]
+    AGENT --> PARSE[parse_request<br/>Intent + Query Plan]
+    PARSE --> POLICY[policy_check<br/>RBAC + Data Scope]
+    POLICY --> SKILL[execute_skill<br/>Skill Registry]
+    SKILL --> TOOLS[Tools<br/>MetricQuery / SQLRunner / Permission]
+    TOOLS --> SEM[Semantic Layer<br/>MetricCatalog]
+    SEM --> DB[(DuckDB<br/>只读)]
+    DB --> VAL[validate_result]
+    VAL --> ANS[generate_answer]
+    ANS --> AUDIT[audit_run<br/>Trace + Audit]
+    AUDIT --> END_NODE[END]
+    PARSE -. unsupported .-> UNSUP[unsupported_response] --> AUDIT
+    POLICY -. deny .-> DENIED[permission_denied] --> AUDIT
+    SKILL -. error .-> ERR[error_response] --> AUDIT
 ```
+
+### Agent 工作流程（LangGraph 编排）
+
+```
+START → parse_request
+        ├─ unsupported → unsupported_response → audit → END
+        └─ policy_check
+           ├─ deny → permission_denied → audit → END
+           └─ execute_skill
+              ├─ error → error_response → audit → END
+              └─ validate_result
+                 ├─ error → error_response → audit → END
+                 └─ generate_answer → audit → END
+```
+
+每个节点都记录 trace（node / latency / status），审计节点统一写 `request_id` + `trace_id`。LLM 只在 parse_request（可选）和 generate_answer（可选）参与，权限检查、Skill 执行、结果校验、SQL 生成为确定性程序逻辑。
 
 ---
 
@@ -430,18 +435,36 @@ data_agent/
 │   ├── retail.duckdb          # 分析数仓
 │   └── runtime/               # 本地审计日志与 Badcase（已忽略，不提交）
 ├── app/
+│   ├── agent/                 # LangGraph Agent Runtime
+│   │   ├── graph.py           # StateGraph 构建与编译
+│   │   ├── state.py           # AgentState 定义
+│   │   ├── contracts.py       # Intent / QueryPlan / ToolResult / ErrorType
+│   │   ├── router.py          # 条件路由
+│   │   ├── nlq.py             # 确定性 NLQ 基线（保留兼容）
+│   │   ├── llm_nlq.py         # DeepSeek 计划解析（保留兼容）
+│   │   └── nodes/             # parse_request / policy_check / execute_skill /
+│   │                           # validate_result / generate_answer / audit_run
+│   ├── skills/                # Skill 层：metric_query / trend / anomaly /
+│   │                           # attribution / report_generation + registry
+│   ├── tools/                 # Tool 层：sql_runner / permission /
+│   │                           # entity_resolver / metadata / metric_query_tool
 │   ├── semantic_layer/        # 指标目录 + 只读 SQL 生成
-│   ├── agent/                 # nlq 确定性引擎 / llm_nlq 增强链路
 │   ├── analytics/             # 异常预警 + 贡献归因
 │   ├── reporting/             # 月报生成
-│   ├── quality/               # 评测执行 + 审计日志 + Badcase
-│   ├── tools/sql_runner.py    # DuckDB 只读执行器
+│   ├── quality/               # 评测 + 审计 + Badcase 生命周期
 │   ├── llm/deepseek_client.py # DeepSeek 客户端
-│   └── web_app.py             # Streamlit Web Demo
-├── scripts/                   # 一键命令：generate_data / init_db / ask / ask_llm /
-│                              # analyze / generate_report / run_evaluation / smoke_query
-├── reports/                   # 生成的月报（如 2025-11-east.md）
-└── tests/                     # 7 个测试文件、19 个测试
+│   └── web_app.py             # Streamlit Web Demo（6 个标签页含 Agent）
+├── configs/
+│   ├── metrics/metrics.json   # 7 个指标口径（唯一来源）
+│   ├── dimensions.json        # 维度取值与别名
+│   ├── users.json             # RBAC 用户与数据范围
+│   └── evaluation/golden_questions.json  # 35 个评测用例（Evaluation 2.0）
+├── scripts/                   # generate_data / init_db / ask / ask_llm /
+│                              # analyze / generate_report / run_evaluation /
+│                              # run_llm_evaluation / smoke_query
+├── reports/                   # 生成的月报与评测报告
+├── docs/architecture.md       # 架构设计说明
+└── tests/                     # 13 个测试文件、65 个测试
 ```
 
 ---

@@ -1,0 +1,29 @@
+{
+  "users": {
+    "user_hq": {
+      "role": "hq_manager",
+      "display_name": "总部经营经理",
+      "data_scope": {"scope": "all"}
+    },
+    "user_east": {
+      "role": "region_manager",
+      "display_name": "华东区域经理",
+      "data_scope": {"scope": "region", "region_name": "华东"}
+    },
+    "user_south": {
+      "role": "region_manager",
+      "display_name": "华南区域经理",
+      "data_scope": {"scope": "region", "region_name": "华南"}
+    },
+    "user_store_01": {
+      "role": "store_manager",
+      "display_name": "上海旗舰店1店店长",
+      "data_scope": {"scope": "store", "store_id": "STORE_001", "store_name": "上海旗舰店1店", "region_name": "华东", "city_name": "上海"}
+    }
+  },
+  "roles": {
+    "hq_manager": {"description": "总部经营经理，可查询全国/区域/门店任意范围"},
+    "region_manager": {"description": "区域经理，只能查询本区域范围"},
+    "store_manager": {"description": "门店经理，只能查询本门店范围"}
+  }
+}
