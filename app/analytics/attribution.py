@@ -68,19 +68,29 @@ class SalesAttributor:
         month: str,
         dimension: str = "store_name",
         region_name: Optional[str] = None,
+        store_id: Optional[str] = None,
     ) -> AttributionResult:
         if dimension not in _DIMENSIONS:
             raise ValueError("暂不支持的归因维度：%s" % dimension)
         current_start, current_end = _month_range(month)
         previous_month = _previous_month(month)
         previous_start, previous_end = _month_range(previous_month)
-        scope_sql = ""
-        params: List[str] = [current_start.isoformat(), current_end.isoformat(), previous_start.isoformat(), previous_end.isoformat()]
+        # 权限范围在 SQL 层过滤，避免越权查看全量数据。
+        scope_clauses: List[str] = []
+        scope_params: List[str] = []
         if region_name:
-            scope_sql = " AND region_name = ?"
-            params.append(region_name)
-            # 参数顺序需要与 SQL 中两个期间的过滤条件一致。
-            params = [current_start.isoformat(), current_end.isoformat(), region_name, previous_start.isoformat(), previous_end.isoformat(), region_name]
+            scope_clauses.append("region_name = ?")
+            scope_params.append(region_name)
+        if store_id:
+            scope_clauses.append("store_id = ?")
+            scope_params.append(store_id)
+        scope_sql = (" AND " + " AND ".join(scope_clauses)) if scope_clauses else ""
+        params: List[str] = (
+            [current_start.isoformat(), current_end.isoformat()]
+            + scope_params
+            + [previous_start.isoformat(), previous_end.isoformat()]
+            + scope_params
+        )
         query = (
             "SELECT period, member, SUM(sales_amount) AS sales_amount FROM ("
             "SELECT 'current' AS period, %s AS member, sales_amount FROM v_sales_enriched "
@@ -118,7 +128,7 @@ class SalesAttributor:
             for member in members
         ]
         return AttributionResult(
-            scope=region_name or "全部区域",
+            scope=region_name or store_id or "全部区域",
             current_period=month,
             comparison_period=previous_month,
             current_total=current_total,

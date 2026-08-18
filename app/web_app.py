@@ -141,9 +141,7 @@ def render_ask() -> None:
 def render_alerts(settings: Dict[str, str]) -> None:
     st.subheader("预警与归因")
     detector = SalesAnomalyDetector(ROOT / "data" / "retail.duckdb")
-    anomalies = detector.detect(settings["month"], entity_level="region")
-    if settings["region"] != "全部区域":
-        anomalies = [item for item in anomalies if item.entity_name == settings["region"]]
+    anomalies = detector.detect(settings["month"], entity_level="region", region_name=selected_region(settings))
     if anomalies:
         for item in anomalies:
             st.warning("[%s] %s：销售额 %s，基线 %s，变化率 %s。规则：%s" % (
@@ -210,7 +208,7 @@ def render_agent() -> None:
     user_options = {
         "总部经理 (user_hq)": ("user_hq", "hq_manager", {"scope": "all"}),
         "华东区域经理 (user_east)": ("user_east", "region_manager", {"scope": "region", "region_name": "华东"}),
-        "门店经理 (user_store_01)": ("user_store_01", "store_manager", {"scope": "store", "store_id": "STORE_001", "store_name": "上海旗舰店1店"}),
+        "门店经理 (user_store_01)": ("user_store_01", "store_manager", {"scope": "store", "store_id": "S001", "store_name": "上海旗舰店1店"}),
     }
     user_label = cols[0].selectbox("当前用户（权限）", list(user_options.keys()))
     use_llm = cols[1].checkbox("使用 LLM（DeepSeek）", value=False)

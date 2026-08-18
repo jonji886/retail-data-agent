@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import duckdb
 
@@ -58,6 +58,8 @@ class SalesAnomalyDetector:
         entity_level: str = "region",
         threshold: float = -0.15,
         baseline_months: int = 3,
+        region_name: Optional[str] = None,
+        store_id: Optional[str] = None,
     ) -> List[Anomaly]:
         if entity_level not in _LEVELS:
             raise ValueError("暂不支持的预警对象：%s" % entity_level)
@@ -70,6 +72,15 @@ class SalesAnomalyDetector:
         previous_month = _previous_month(month, 1)
         _, baseline_end = _month_range(previous_month)
         id_column, name_column = _LEVELS[entity_level]
+        # 权限范围在 SQL 层过滤，避免门店经理/区域经理看到越权数据。
+        scope_sql = ""
+        scope_params: List[str] = []
+        if region_name:
+            scope_sql += " AND region_name = ?"
+            scope_params.append(region_name)
+        if store_id:
+            scope_sql += " AND store_id = ?"
+            scope_params.append(store_id)
         connection = duckdb.connect(str(self.database_path), read_only=True)
         try:
             rows = connection.execute(
@@ -79,11 +90,11 @@ class SalesAnomalyDetector:
                        %s AS entity_name,
                        SUM(sales_amount) AS sales_amount
                 FROM v_sales_enriched
-                WHERE sale_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+                WHERE sale_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)%s
                 GROUP BY 1, 2, 3
                 ORDER BY 1, 2
-                """ % (id_column, name_column),
-                [baseline_start.isoformat(), current_end.isoformat()],
+                """ % (id_column, name_column, scope_sql),
+                [baseline_start.isoformat(), current_end.isoformat()] + scope_params,
             ).fetchall()
         finally:
             connection.close()

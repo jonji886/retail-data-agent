@@ -15,7 +15,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
@@ -28,7 +28,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 4,
       "errors": [],
@@ -41,7 +41,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 24,
       "errors": [],
@@ -54,7 +54,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 4,
       "errors": [],
@@ -67,7 +67,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 6,
       "errors": [],
@@ -80,7 +80,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
@@ -93,7 +93,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
@@ -106,7 +106,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
@@ -119,7 +119,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 4,
       "errors": [],
@@ -132,7 +132,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 4,
       "errors": [],
@@ -145,7 +145,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 6,
       "errors": [],
@@ -158,7 +158,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
@@ -171,7 +171,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
@@ -184,7 +184,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 4,
       "errors": [],
@@ -197,7 +197,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
@@ -210,7 +210,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 12,
       "errors": [],
@@ -223,7 +223,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 6,
       "errors": [],
@@ -240,7 +240,7 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 87
+      "latency_ms": 84
     },
     {
       "case_id": "g019",
@@ -253,7 +253,7 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 102
+      "latency_ms": 120
     },
     {
       "case_id": "g020",
@@ -266,7 +266,7 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 248
+      "latency_ms": 318
     },
     {
       "case_id": "g021",
@@ -279,7 +279,7 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 50
+      "latency_ms": 65
     },
     {
       "case_id": "g022",
@@ -292,7 +292,7 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 50
+      "latency_ms": 67
     },
     {
       "case_id": "g023",
@@ -314,7 +314,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
@@ -331,7 +331,7 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 53
+      "latency_ms": 73
     },
     {
       "case_id": "g026",
@@ -344,7 +344,7 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 58
+      "latency_ms": 65
     },
     {
       "case_id": "g027",
@@ -357,7 +357,7 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 51
+      "latency_ms": 61
     },
     {
       "case_id": "g028",
@@ -370,7 +370,7 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 53
+      "latency_ms": 54
     },
     {
       "case_id": "g029",
@@ -383,7 +383,7 @@
       "permission_pass": true,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 52
+      "latency_ms": 57
     },
     {
       "case_id": "g030",
@@ -396,7 +396,7 @@
       "permission_pass": true,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 116
+      "latency_ms": 126
     },
     {
       "case_id": "g031",
@@ -409,7 +409,7 @@
       "permission_pass": true,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 83
+      "latency_ms": 197
     },
     {
       "case_id": "g032",
@@ -422,7 +422,7 @@
       "permission_pass": true,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 55
+      "latency_ms": 54
     },
     {
       "case_id": "g033",
@@ -431,7 +431,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 2,
       "errors": [],
@@ -444,7 +444,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 4,
       "errors": [],
@@ -457,7 +457,7 @@
       "passed": true,
       "intent_match": true,
       "execution_success": true,
-      "result_accuracy": null,
+      "result_accuracy": true,
       "permission_pass": null,
       "row_count": 1,
       "errors": [],

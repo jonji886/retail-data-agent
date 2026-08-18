@@ -18,7 +18,7 @@
     "user_store_01": {
       "role": "store_manager",
       "display_name": "上海旗舰店1店店长",
-      "data_scope": {"scope": "store", "store_id": "STORE_001", "store_name": "上海旗舰店1店", "region_name": "华东", "city_name": "上海"}
+      "data_scope": {"scope": "store", "store_id": "S001", "store_name": "上海旗舰店1店", "region_name": "华东", "city_name": "上海"}
     }
   },
   "roles": {

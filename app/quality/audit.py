@@ -83,9 +83,14 @@ class AuditLogger:
         tool_calls: Optional[List[Dict[str, Any]]] = None,
         trace_events: Optional[List[Dict[str, Any]]] = None,
         llm_calls: Optional[List[Dict[str, Any]]] = None,
+        event_id: str = "",
     ) -> str:
-        """记录一次完整 Agent Run 的审计信息（不记录敏感凭证）。"""
-        event_id = uuid.uuid4().hex[:12]
+        """记录一次完整 Agent Run 的审计信息（不记录敏感凭证）。
+
+        event_id 允许调用方预生成，以便把 audit 事件也纳入 trace_events 后
+        再落盘，保证审计日志中的 trace 完整、有序。
+        """
+        event_id = event_id or uuid.uuid4().hex[:12]
         payload: Dict[str, Any] = {
             "event_id": event_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),

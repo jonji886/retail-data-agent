@@ -84,17 +84,20 @@ class RetailReportBuilder:
         month: str,
         region_name: Optional[str] = None,
         attribution_dimension: str = "store_name",
+        store_id: Optional[str] = None,
     ) -> ReportContext:
         previous_month = _previous_month(month)
         current_start, current_end = _month_range(month)
         previous_start, previous_end = _month_range(previous_month)
-        scope = region_name or "全部区域"
-        kpis = self._load_kpis(current_start, current_end, previous_start, previous_end, region_name)
-        trend = self._load_trend(month, region_name)
-        anomalies = SalesAnomalyDetector(self.database_path).detect(month, entity_level="region")
-        if region_name:
-            anomalies = [item for item in anomalies if item.entity_name == region_name]
-        attribution = SalesAttributor(self.database_path).analyze(month, attribution_dimension, region_name)
+        scope = region_name or store_id or "全部区域"
+        kpis = self._load_kpis(current_start, current_end, previous_start, previous_end, region_name, store_id)
+        trend = self._load_trend(month, region_name, store_id)
+        # 门店经理按门店粒度检测，区域/总部按区域粒度检测，均在 SQL 层限定权限范围。
+        if store_id:
+            anomalies = SalesAnomalyDetector(self.database_path).detect(month, entity_level="store", store_id=store_id)
+        else:
+            anomalies = SalesAnomalyDetector(self.database_path).detect(month, entity_level="region", region_name=region_name)
+        attribution = SalesAttributor(self.database_path).analyze(month, attribution_dimension, region_name, store_id)
         return ReportContext(
             company="优选生活",
             report_type="经营分析月报",
@@ -114,15 +117,20 @@ class RetailReportBuilder:
         previous_start: date,
         previous_end: date,
         region_name: Optional[str],
+        store_id: Optional[str],
     ) -> List[KPI]:
-        scope_sql = ""
-        params: List[str] = [current_start.isoformat(), current_end.isoformat()]
+        scope_clauses: List[str] = []
+        scope_params: List[str] = []
         if region_name:
-            scope_sql = " AND region_name = ?"
-            params.append(region_name)
+            scope_clauses.append("region_name = ?")
+            scope_params.append(region_name)
+        if store_id:
+            scope_clauses.append("store_id = ?")
+            scope_params.append(store_id)
+        scope_sql = (" AND " + " AND ".join(scope_clauses)) if scope_clauses else ""
+        params: List[str] = [current_start.isoformat(), current_end.isoformat()] + scope_params
         params.extend([previous_start.isoformat(), previous_end.isoformat()])
-        if region_name:
-            params.append(region_name)
+        params.extend(scope_params)
         query = (
             "SELECT period, SUM(sales_amount), SUM(order_count), SUM(gross_profit), "
             "SUM(sales_amount) / NULLIF(SUM(order_count), 0) "
@@ -156,17 +164,22 @@ class RetailReportBuilder:
             for name, display_name, current_value, previous_value, metric_format in metrics
         ]
 
-    def _load_trend(self, month: str, region_name: Optional[str]) -> List[Mapping[str, Any]]:
+    def _load_trend(self, month: str, region_name: Optional[str], store_id: Optional[str]) -> List[Mapping[str, Any]]:
         end = _month_range(month)[1]
         start_month = month
         for _ in range(5):
             start_month = _previous_month(start_month)
         start = _month_range(start_month)[0]
-        scope_sql = ""
-        params: List[str] = [start.isoformat(), end.isoformat()]
+        scope_clauses: List[str] = []
+        scope_params: List[str] = []
         if region_name:
-            scope_sql = " AND region_name = ?"
-            params.append(region_name)
+            scope_clauses.append("region_name = ?")
+            scope_params.append(region_name)
+        if store_id:
+            scope_clauses.append("store_id = ?")
+            scope_params.append(store_id)
+        scope_sql = (" AND " + " AND ".join(scope_clauses)) if scope_clauses else ""
+        params: List[str] = [start.isoformat(), end.isoformat()] + scope_params
         query = (
             "SELECT strftime(date_trunc('month', sale_date), '%%Y-%%m') AS period, "
             "SUM(sales_amount) AS sales_amount, SUM(gross_profit) / NULLIF(SUM(sales_amount), 0) AS gross_margin_rate "

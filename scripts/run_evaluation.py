@@ -23,19 +23,21 @@ def main() -> None:
     passed = sum(1 for result in results if result.passed)
     print("Baseline Result: %d/%d passed" % (passed, len(results)))
 
-    # v2 详细报告
-    print("\n--- Evaluation 2.0 ---")
+    # v2 详细报告（分层指标：Plan / Execution / Result / Behavior）
+    print("\n--- Evaluation 2.0 (分层指标) ---")
     report = run_golden_v2(ROOT)
     print("Total cases: %d" % report["total"])
-    print("Overall pass rate: %.1f%%" % (report["overall_pass_rate"] * 100))
-    print("Plan accuracy: %.1f%%" % (report["plan_accuracy"] * 100))
-    print("Execution success rate: %.1f%%" % (report["execution_success_rate"] * 100))
+    print("[Overall]  pass rate: %.1f%%" % (report["overall_pass_rate"] * 100))
+    print("[Plan]     accuracy: %.1f%%" % (report["plan_accuracy"] * 100))
+    print("[Execution] success rate: %.1f%%" % (report["execution_success_rate"] * 100))
     if report["result_accuracy"] is not None:
-        print("Result accuracy: %.1f%%" % (report["result_accuracy"] * 100))
+        print("[Result]   accuracy: %.1f%%" % (report["result_accuracy"] * 100))
     if report["unsupported_reject_rate"] is not None:
-        print("Unsupported reject rate: %.1f%%" % (report["unsupported_reject_rate"] * 100))
+        print("[Behavior] unsupported reject rate: %.1f%%" % (report["unsupported_reject_rate"] * 100))
     if report["permission_safety_pass_rate"] is not None:
-        print("Permission safety pass rate: %.1f%%" % (report["permission_safety_pass_rate"] * 100))
+        print("[Behavior] permission safety pass rate: %.1f%%" % (report["permission_safety_pass_rate"] * 100))
+    print("\n提示：LLM 增强评测需单独运行 python3 scripts/run_llm_evaluation.py，"
+          "未配置 DEEPSEEK_API_KEY 时相关用例将 SKIP 而非 FAIL。")
 
     # 写入报告文件
     report_dir = ROOT / "reports"

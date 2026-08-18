@@ -75,12 +75,12 @@ class AgentGraphTest(unittest.TestCase):
         state = run_agent(
             "2025年11月销售额", ROOT,
             user_id="user_store_01", role="store_manager",
-            data_scope={"scope": "store", "store_id": "STORE_001", "store_name": "上海旗舰店1店"},
+            data_scope={"scope": "store", "store_id": "S001", "store_name": "上海旗舰店1店"},
         )
         self.assertEqual(state["permission_decision"], "allow")
         # 验证 filters 被注入了 store_id
         plan = state.get("query_plan", {})
-        self.assertEqual(plan.get("filters", {}).get("store_id"), "STORE_001")
+        self.assertEqual(plan.get("filters", {}).get("store_id"), "S001")
 
     def test_hq_can_query_any_region(self) -> None:
         state = run_agent("华南2025年11月销售额", ROOT)

@@ -15,6 +15,8 @@ from app.skills.trend_analysis import trend_analysis_skill
 ROOT = Path(".")
 CONTEXT = {"root": ROOT, "authorized_filters": {"region_name": "华东"},
            "user_id": "user_hq", "role": "hq_manager"}
+STORE_CONTEXT = {"root": ROOT, "authorized_filters": {"store_id": "S001"},
+                 "user_id": "user_store_01", "role": "store_manager"}
 
 
 class MetricQuerySkillTest(unittest.TestCase):
@@ -83,6 +85,46 @@ class ReportGenerationSkillTest(unittest.TestCase):
         self.assertTrue(result["markdown"])
         self.assertIn("经营分析月报", result["markdown"])
         self.assertGreater(len(result["kpis"]), 0)
+
+
+class StoreScopeTest(unittest.TestCase):
+    """门店经理 Data Scope：anomaly/attribution/report 必须只看到本门店数据。"""
+
+    def test_anomaly_scoped_to_own_store(self) -> None:
+        plan = QueryPlan(
+            intent="anomaly_analysis", metric="sales_amount",
+            filters={}, report_month="2025-11",
+            start_date=date(2025, 11, 1), end_date=date(2025, 11, 30),
+        )
+        result = anomaly_analysis_skill(plan, STORE_CONTEXT)
+        self.assertTrue(result["success"])
+        self.assertTrue(result["anomalies"])
+        for item in result["anomalies"]:
+            self.assertEqual(item["entity_level"], "store")
+            self.assertEqual(item["entity_id"], "S001")
+
+    def test_attribution_defaults_to_category_and_scoped(self) -> None:
+        plan = QueryPlan(
+            intent="attribution_analysis", metric="sales_amount",
+            filters={}, report_month="2025-11",
+            attribution_dimension=None,
+            start_date=date(2025, 11, 1), end_date=date(2025, 11, 30),
+        )
+        result = attribution_analysis_skill(plan, STORE_CONTEXT)
+        self.assertTrue(result["success"])
+        self.assertEqual(result["scope"], "S001")
+        self.assertEqual(result["dimension"], "category_name")
+
+    def test_report_scoped_to_own_store(self) -> None:
+        plan = QueryPlan(
+            intent="report_generation", metric="sales_amount",
+            filters={}, report_month="2025-11",
+            attribution_dimension=None,
+        )
+        result = report_generation_skill(plan, STORE_CONTEXT)
+        self.assertTrue(result["success"])
+        self.assertEqual(result["scope"], "S001")
+        self.assertEqual(result["attribution_dimension"], "category_name")
 
 
 if __name__ == "__main__":

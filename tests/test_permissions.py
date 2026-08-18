@@ -38,18 +38,18 @@ class PermissionTest(unittest.TestCase):
 
     def test_store_manager_can_query_own_store(self) -> None:
         allow, filters, reason = self.checker.check_and_authorize(
-            "user_store_01", {"store_id": "STORE_001"})
+            "user_store_01", {"store_id": "S001"})
         self.assertTrue(allow)
 
     def test_store_manager_denied_cross_store(self) -> None:
         allow, filters, reason = self.checker.check_and_authorize(
-            "user_store_01", {"store_id": "STORE_002"})
+            "user_store_01", {"store_id": "S002"})
         self.assertFalse(allow)
 
     def test_store_manager_auto_injected_store(self) -> None:
         allow, filters, reason = self.checker.check_and_authorize("user_store_01", {})
         self.assertTrue(allow)
-        self.assertEqual(filters["store_id"], "STORE_001")
+        self.assertEqual(filters["store_id"], "S001")
 
     def test_store_manager_denied_cross_region_even_without_store(self) -> None:
         # 门店经理查询其它区域应被拒绝

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict
 
@@ -36,8 +37,19 @@ def audit_run(state: AgentState) -> AgentState:
             if data.get("sql"):
                 sql_list.append(data["sql"])
 
-    # 记录到审计日志
-    event_id = logger.record_agent_run(
+    # 预生成事件 ID，并把 audit_run 节点事件纳入 trace，保证审计日志中的
+    # trace 完整、按执行顺序排列（parse_request → ... → audit_run）。
+    event_id = uuid.uuid4().hex[:12]
+    end_at = time.monotonic()
+    events.append({
+        "trace_id": trace_id, "node": "audit_run",
+        "start_at": started, "end_at": end_at,
+        "latency_ms": int((end_at - started) * 1000),
+        "status": "success", "audit_event_id": event_id,
+    })
+
+    # 记录到审计日志（trace_events 已包含 audit_run 节点自身）。
+    logger.record_agent_run(
         request_id=state.get("request_id", ""),
         trace_id=trace_id,
         question=question,
@@ -55,13 +67,7 @@ def audit_run(state: AgentState) -> AgentState:
         tool_calls=state.get("tool_calls", []),
         trace_events=events,
         llm_calls=state.get("llm_calls", []),
+        event_id=event_id,
     )
-
-    events.append({
-        "trace_id": trace_id, "node": "audit_run",
-        "start_at": started, "end_at": time.monotonic(),
-        "latency_ms": int((time.monotonic() - started) * 1000),
-        "status": "success", "audit_event_id": event_id,
-    })
 
     return {**state, "trace_events": events}

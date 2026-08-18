@@ -29,6 +29,7 @@ class EvaluationResult:
     row_count: int
     errors: List[str] = field(default_factory=list)
     latency_ms: int = 0
+    should_reject: bool = False
 
 
 def _load_cases(root: Path) -> List[Dict[str, Any]]:
@@ -76,22 +77,25 @@ def _run_baseline(root: Path, case: Dict[str, Any]) -> EvaluationResult:
         if row_count < case.get("min_rows", 1):
             errors.append("rows=%d min=%d" % (row_count, case.get("min_rows", 1)))
         execution_success = row_count > 0 or case.get("expect_empty", False)
-        # ground truth result 检查
+        # ground truth result 检查：行数 + 整体聚合值（单行取该行，多行取各行求和）
         if "ground_truth" in case:
             gt = case["ground_truth"]
-            expected_value = gt["value"]
             tolerance = gt.get("tolerance", 0.01)
-            actual = None
-            if answer.rows:
-                actual = float(answer.rows[0].get("value") or answer.rows[0].get("current_value") or 0)
-            if actual is None:
-                result_accuracy = False
-                errors.append("ground_truth: no value")
-            elif abs(actual - expected_value) > tolerance:
-                result_accuracy = False
-                errors.append("ground_truth: %.2f != %.2f" % (actual, expected_value))
-            else:
-                result_accuracy = True
+            expected_value = gt.get("value")
+            expected_rows = gt.get("row_count")
+            ok = True
+            if expected_rows is not None and row_count != expected_rows:
+                ok = False
+                errors.append("ground_truth rows=%d expected=%d" % (row_count, expected_rows))
+            if ok and expected_value is not None:
+                actual = sum(
+                    float(r.get("value") or r.get("current_value") or 0)
+                    for r in answer.rows
+                ) if answer.rows else 0.0
+                if abs(actual - expected_value) > tolerance:
+                    ok = False
+                    errors.append("ground_truth: %.2f != %.2f" % (actual, expected_value))
+            result_accuracy = ok
     except NLQError as exc:
         errors.append(str(exc))
         intent_match = False
@@ -167,7 +171,7 @@ def _run_agent_case(root: Path, case: Dict[str, Any]) -> EvaluationResult:
         passed=passed, intent_match=intent_match,
         execution_success=execution_success, result_accuracy=None,
         permission_pass=permission_pass, row_count=0, errors=errors,
-        latency_ms=latency_ms,
+        latency_ms=latency_ms, should_reject=bool(case.get("should_reject")),
     )
 
 
@@ -193,8 +197,7 @@ def run_golden_v2(root: Path) -> Dict[str, Any]:
     exec_success = sum(1 for r in results if r.execution_success)
     result_correct = sum(1 for r in results if r.result_accuracy is True)
     result_checked = sum(1 for r in results if r.result_accuracy is not None)
-    unsupported_cases = [r for r in results if r.category in ("security", "boundary") and
-                         (r.question and any(k in r.question for k in ["删除", "DROP", "忽略", "数据库结构", "经营情况"]))]
+    unsupported_cases = [r for r in results if r.should_reject]
     unsupported_rejected = sum(1 for r in unsupported_cases if r.passed)
     perm_cases = [r for r in results if r.category == "permission"]
     perm_passed = sum(1 for r in perm_cases if r.permission_pass is True)

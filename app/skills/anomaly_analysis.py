@@ -16,11 +16,20 @@ def anomaly_analysis_skill(plan: QueryPlan, context: Dict[str, Any]) -> Dict[str
     root = context["root"]
     database_path = root / "data" / "retail.duckdb"
     month = plan.report_month or (plan.start_date.strftime("%Y-%m") if plan.start_date else "2025-11")
-    region_filter = context.get("authorized_filters", {}).get("region_name")
+    authorized_filters = context.get("authorized_filters", {})
+    region_name = authorized_filters.get("region_name")
+    store_id = authorized_filters.get("store_id")
+    # 门店经理按门店粒度检测，区域/总部按区域粒度检测，均在 SQL 层限定权限范围。
+    entity_level = "store" if store_id else "region"
 
     detector = SalesAnomalyDetector(database_path)
     try:
-        anomalies = detector.detect(month, entity_level="region")
+        anomalies = detector.detect(
+            month,
+            entity_level=entity_level,
+            region_name=region_name,
+            store_id=store_id,
+        )
     except ValueError as exc:
         return {
             "skill": "anomaly_analysis",
@@ -29,10 +38,6 @@ def anomaly_analysis_skill(plan: QueryPlan, context: Dict[str, Any]) -> Dict[str
             "error_message": str(exc),
             "tool_results": [],
         }
-
-    # 按权限收窄
-    if region_filter:
-        anomalies = [a for a in anomalies if a.entity_name == region_filter]
 
     return {
         "skill": "anomaly_analysis",

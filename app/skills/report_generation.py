@@ -17,10 +17,12 @@ def report_generation_skill(plan: QueryPlan, context: Dict[str, Any]) -> Dict[st
     month = plan.report_month or (plan.start_date.strftime("%Y-%m") if plan.start_date else "2025-11")
     authorized_filters = context.get("authorized_filters", {})
     region_name = authorized_filters.get("region_name")
-    dimension = plan.attribution_dimension or "store_name"
+    store_id = authorized_filters.get("store_id")
+    # 门店经理无法跨门店归因，默认拆解本门店内的品类贡献。
+    dimension = plan.attribution_dimension or ("category_name" if store_id else "store_name")
 
     builder = RetailReportBuilder(root)
-    report_context = builder.build_context(month, region_name, dimension)
+    report_context = builder.build_context(month, region_name, dimension, store_id=store_id)
     markdown = builder.to_markdown(report_context)
 
     return {
