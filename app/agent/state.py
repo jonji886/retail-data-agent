@@ -55,6 +55,11 @@ class AgentState(TypedDict, total=False):
     trace_events: List[Dict[str, Any]]
     llm_calls: List[Dict[str, Any]]
 
+    # 运行时上下文（由 run_agent 注入，必须声明在 schema 中，
+    # 否则 LangGraph 编译后节点收不到这些键，导致 use_llm 静默失效）
+    _root: str
+    _use_llm: bool
+
 
 def new_state(question: str, user_id: str = "user_hq", role: str = "hq_manager",
               data_scope: Optional[Dict[str, Any]] = None, thread_id: str = "",

@@ -145,11 +145,14 @@ parse_request
 
 ### 指标
 
+指标口径以 `docs/evaluation.md` 为准：
+
 - Plan Accuracy
-- Execution Success Rate
+- Executable Success Rate（denominator = 期望执行业务工具的 27 个用例，不含拒绝/拦截类）
 - Result Accuracy（ground truth 数值校验）
 - Unsupported Reject Rate
 - Permission Safety Pass Rate
+- Security Defense Rate
 - Overall Pass Rate
 
 ### 两条链路

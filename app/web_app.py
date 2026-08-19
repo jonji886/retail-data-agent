@@ -18,7 +18,7 @@ from app.agent.nlq import NLQError, NaturalLanguageQueryEngine
 from app.analytics.anomaly import SalesAnomalyDetector
 from app.analytics.attribution import SalesAttributor
 from app.quality.audit import AuditLogger
-from app.quality.evaluation import run_golden
+from app.quality.evaluation import run_golden, run_golden_v2
 from app.reporting.weekly_report import RetailReportBuilder
 
 
@@ -314,15 +314,34 @@ def render_agent() -> None:
 
 def render_quality() -> None:
     st.subheader("质量评测与审计")
-    results = run_golden(ROOT)
-    passed = sum(1 for item in results if item.passed)
-    cols = st.columns(3)
-    cols[0].metric("通过率", "%.1f%%" % (passed / len(results) * 100 if results else 0))
-    cols[1].metric("通过用例", "%d" % passed)
-    cols[2].metric("总用例", "%d" % len(results))
+    report = run_golden_v2(ROOT)
+    results = report["results"]
+    passed = report["passed"]
+    def pct(v):
+        return "%.1f%%" % (v * 100) if v is not None else "-"
+    cols = st.columns(4)
+    cols[0].metric("总用例", "%d" % report["total"])
+    cols[1].metric("通过率", pct(report["overall_pass_rate"]))
+    cols[2].metric("Plan Accuracy", pct(report["plan_accuracy"]))
+    cols[3].metric("Executable Success", "%s / %s" % (report["executable_cases"], report["total"]))
+    cols = st.columns(4)
+    cols[0].metric("Result Accuracy", pct(report.get("result_accuracy")))
+    cols[1].metric("Permission Safety", pct(report.get("permission_safety_pass_rate")))
+    cols[2].metric("Unsupported Reject", pct(report.get("unsupported_reject_rate")))
+    cols[3].metric("Security Defense", pct(report.get("security_defense_rate")))
+    st.caption("Executable Success Rate 只统计期望真正执行工具的用例；权限拒绝 / 不支持 / 安全拦截类用例不计入执行成功率分母。")
+    st.markdown("### 分类型通过率")
+    by_cat = report.get("by_category", {})
+    st.dataframe([
+        {"类型": cat, "用例数": info["total"], "通过": info["passed"], "通过率": pct(info.get("pass_rate"))}
+        for cat, info in by_cat.items()
+    ], width="stretch", hide_index=True)
     st.markdown("### Golden Dataset")
     st.dataframe([
-        {"用例": item.case_id, "问题": item.question, "结果": "PASS" if item.passed else "FAIL", "返回行数": item.row_count, "错误": "; ".join(item.errors)}
+        {"用例": item.case_id, "问题": item.question, "类型": item.category,
+         "结果": "PASS" if item.passed else "FAIL",
+         "执行": "Y" if item.executable else "N",
+         "返回行数": item.row_count, "错误": "; ".join(item.errors)}
         for item in results
     ], width="stretch", hide_index=True)
 

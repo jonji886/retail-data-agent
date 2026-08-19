@@ -16,7 +16,13 @@ class EvaluationTest(unittest.TestCase):
         self.assertGreater(report["passed"], 0)
         self.assertIn("overall_pass_rate", report)
         self.assertIn("plan_accuracy", report)
-        self.assertIn("execution_success_rate", report)
+        self.assertIn("executable_success_rate", report)
+        self.assertGreater(report["executable_cases"], 0)
+        # 执行成功率分母 = executable 用例，而非全部用例
+        self.assertEqual(
+            report["executable_cases"],
+            sum(1 for r in report["results"] if r["executable"]),
+        )
 
     def test_ground_truth_result_accuracy(self) -> None:
         """g023 有 ground_truth value=1371235.35，必须 PASS。"""

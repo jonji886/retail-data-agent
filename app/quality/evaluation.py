@@ -1,7 +1,13 @@
 """Evaluation 2.0：支持 intent / plan / result / permission / security 多维评测。
 
-输出指标：Plan Accuracy、Execution Success Rate、Result Accuracy、
-Unsupported Reject Rate、Permission Safety Pass Rate、Overall Pass Rate。
+输出指标：Plan Accuracy、Executable Success Rate、Result Accuracy、
+Unsupported Reject Rate、Permission Safety Pass Rate、Security Defense Rate、
+Overall Pass Rate。
+
+执行类指标（Executable Success Rate）的 denominator 只包含"期望真正调用业务
+执行工具"的用例（normal / trend / attribution / anomaly / report /
+permission-allow）；权限拒绝、不支持、安全拦截类用例期望"不执行"，
+不计入执行成功率分母。
 """
 
 from __future__ import annotations
@@ -30,6 +36,11 @@ class EvaluationResult:
     errors: List[str] = field(default_factory=list)
     latency_ms: int = 0
     should_reject: bool = False
+    should_deny: bool = False
+    should_allow: bool = False
+    # executable: 该用例是否期望真正调用业务执行工具（query/归因/异常/报告）。
+    # 权限拒绝、不支持、安全类用例期望"不执行"，不应进入执行成功率分母。
+    executable: bool = True
 
 
 def _load_cases(root: Path) -> List[Dict[str, Any]]:
@@ -129,18 +140,27 @@ def _run_agent_case(root: Path, case: Dict[str, Any]) -> EvaluationResult:
     if not intent_match:
         errors.append("intent=%s expected=%s" % (state.get("intent"), case.get("intent")))
 
+    should_reject = bool(case.get("should_reject"))
+    should_deny = bool(case.get("should_deny"))
+    should_allow = bool(case.get("should_allow"))
+    tool_calls = state.get("tool_calls") or []
+
     # should_reject: 必须 unsupported
-    if case.get("should_reject"):
+    if should_reject:
         if state.get("intent") != "unsupported":
             errors.append("should_reject but intent=%s" % state.get("intent"))
     # should_deny: 必须权限拒绝
-    if case.get("should_deny"):
+    if should_deny:
         if state.get("permission_decision") != "deny":
             errors.append("should_deny but permission=%s" % state.get("permission_decision"))
     # should_allow: 必须权限通过
-    if case.get("should_allow"):
+    if should_allow:
         if state.get("permission_decision") != "allow":
             errors.append("should_allow but permission=%s" % state.get("permission_decision"))
+
+    # 拒绝 / 拒绝权限类用例期望"不发生任何业务工具执行"
+    if (should_reject or should_deny) and tool_calls:
+        errors.append("expected no tool execution but got %d tool_calls" % len(tool_calls))
 
     # expected_filter 检查
     if "expected_filter" in case:
@@ -150,17 +170,22 @@ def _run_agent_case(root: Path, case: Dict[str, Any]) -> EvaluationResult:
             if actual_filters.get(k) != v:
                 errors.append("expected_filter %s=%s but got %s" % (k, v, actual_filters.get(k)))
 
-    # 归因/异常/报告：检查执行成功
+    # 执行校验：归因/异常/报告 + 权限允许后的查询，都必须真正执行成功
     execution_success = False
     if case.get("intent") in ("attribution_analysis", "anomaly_analysis", "report_generation"):
         result = state.get("result") or {}
         execution_success = bool(result.get("success"))
         if not execution_success:
             errors.append("skill failed: %s" % result.get("error_message"))
+    elif should_allow and case.get("intent") in ("metric_query", "trend_analysis"):
+        result = state.get("result") or {}
+        execution_success = bool(result.get("success"))
+        if not execution_success:
+            errors.append("allowed query execution failed: %s" % result.get("error_message"))
 
     permission_pass: Optional[bool] = None
-    if case.get("should_deny") or case.get("should_allow"):
-        if case.get("should_deny"):
+    if should_deny or should_allow:
+        if should_deny:
             permission_pass = state.get("permission_decision") == "deny"
         else:
             permission_pass = state.get("permission_decision") == "allow"
@@ -171,7 +196,10 @@ def _run_agent_case(root: Path, case: Dict[str, Any]) -> EvaluationResult:
         passed=passed, intent_match=intent_match,
         execution_success=execution_success, result_accuracy=None,
         permission_pass=permission_pass, row_count=0, errors=errors,
-        latency_ms=latency_ms, should_reject=bool(case.get("should_reject")),
+        latency_ms=latency_ms,
+        should_reject=should_reject, should_deny=should_deny,
+        should_allow=should_allow,
+        executable=not (should_reject or should_deny),
     )
 
 
@@ -194,23 +222,43 @@ def run_golden_v2(root: Path) -> Dict[str, Any]:
     total = len(results)
     passed = sum(1 for r in results if r.passed)
     plan_correct = sum(1 for r in results if r.intent_match)
-    exec_success = sum(1 for r in results if r.execution_success)
+    executable_cases = [r for r in results if r.executable]
+    non_executable_cases = [r for r in results if not r.executable]
+    exec_success = sum(1 for r in executable_cases if r.execution_success)
     result_correct = sum(1 for r in results if r.result_accuracy is True)
     result_checked = sum(1 for r in results if r.result_accuracy is not None)
     unsupported_cases = [r for r in results if r.should_reject]
     unsupported_rejected = sum(1 for r in unsupported_cases if r.passed)
     perm_cases = [r for r in results if r.category == "permission"]
     perm_passed = sum(1 for r in perm_cases if r.permission_pass is True)
+    security_cases = [r for r in results if r.category == "security"]
+    security_passed = sum(1 for r in security_cases if r.passed)
+
+    by_category: Dict[str, Dict[str, Any]] = {}
+    for r in results:
+        entry = by_category.setdefault(r.category, {"total": 0, "passed": 0})
+        entry["total"] += 1
+        if r.passed:
+            entry["passed"] += 1
+    for entry in by_category.values():
+        entry["pass_rate"] = entry["passed"] / entry["total"] if entry["total"] else None
 
     return {
+        "version": "2.0",
         "total": total,
         "passed": passed,
         "overall_pass_rate": passed / total if total else 0,
         "plan_accuracy": plan_correct / total if total else 0,
-        "execution_success_rate": exec_success / total if total else 0,
+        # 执行类指标：denominator 只统计"期望真正执行业务工具"的用例，
+        # 权限拒绝 / 不支持 / 安全拦截类用例被排除在外。
+        "executable_cases": len(executable_cases),
+        "non_executable_cases": len(non_executable_cases),
+        "executable_success_rate": exec_success / len(executable_cases) if executable_cases else None,
         "result_accuracy": result_correct / result_checked if result_checked else None,
         "unsupported_reject_rate": unsupported_rejected / len(unsupported_cases) if unsupported_cases else None,
         "permission_safety_pass_rate": perm_passed / len(perm_cases) if perm_cases else None,
+        "security_defense_rate": security_passed / len(security_cases) if security_cases else None,
+        "by_category": by_category,
         "results": [
             {
                 "case_id": r.case_id, "question": r.question, "category": r.category,
@@ -220,6 +268,10 @@ def run_golden_v2(root: Path) -> Dict[str, Any]:
                 "permission_pass": r.permission_pass,
                 "row_count": r.row_count, "errors": r.errors,
                 "latency_ms": r.latency_ms,
+                "executable": r.executable,
+                "should_reject": r.should_reject,
+                "should_deny": r.should_deny,
+                "should_allow": r.should_allow,
             }
             for r in results
         ],

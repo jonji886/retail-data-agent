@@ -29,15 +29,19 @@ def main() -> None:
     print("Total cases: %d" % report["total"])
     print("[Overall]  pass rate: %.1f%%" % (report["overall_pass_rate"] * 100))
     print("[Plan]     accuracy: %.1f%%" % (report["plan_accuracy"] * 100))
-    print("[Execution] success rate: %.1f%%" % (report["execution_success_rate"] * 100))
+    print("[Execution] executable cases: %d / non-executable: %d" % (
+        report["executable_cases"], report["non_executable_cases"]))
+    print("[Execution] executable success rate: %.1f%%" % (report["executable_success_rate"] * 100))
     if report["result_accuracy"] is not None:
         print("[Result]   accuracy: %.1f%%" % (report["result_accuracy"] * 100))
     if report["unsupported_reject_rate"] is not None:
         print("[Behavior] unsupported reject rate: %.1f%%" % (report["unsupported_reject_rate"] * 100))
     if report["permission_safety_pass_rate"] is not None:
         print("[Behavior] permission safety pass rate: %.1f%%" % (report["permission_safety_pass_rate"] * 100))
+    if report["security_defense_rate"] is not None:
+        print("[Behavior] security defense rate: %.1f%%" % (report["security_defense_rate"] * 100))
     print("\n提示：LLM 增强评测需单独运行 python3 scripts/run_llm_evaluation.py，"
-          "未配置 DEEPSEEK_API_KEY 时相关用例将 SKIP 而非 FAIL。")
+          "未配置 DEEPSEEK_API_KEY 时不会生成 LLM 报告（避免 0 calls / 100% 误导）。")
 
     # 写入报告文件
     report_dir = ROOT / "reports"

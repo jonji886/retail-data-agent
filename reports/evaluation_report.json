@@ -1,12 +1,63 @@
 {
+  "version": "2.0",
   "total": 35,
   "passed": 35,
   "overall_pass_rate": 1.0,
   "plan_accuracy": 1.0,
-  "execution_success_rate": 0.7142857142857143,
+  "executable_cases": 27,
+  "non_executable_cases": 8,
+  "executable_success_rate": 1.0,
   "result_accuracy": 1.0,
   "unsupported_reject_rate": 1.0,
   "permission_safety_pass_rate": 1.0,
+  "security_defense_rate": 1.0,
+  "by_category": {
+    "normal": {
+      "total": 12,
+      "passed": 12,
+      "pass_rate": 1.0
+    },
+    "trend": {
+      "total": 3,
+      "passed": 3,
+      "pass_rate": 1.0
+    },
+    "expression": {
+      "total": 5,
+      "passed": 5,
+      "pass_rate": 1.0
+    },
+    "attribution": {
+      "total": 1,
+      "passed": 1,
+      "pass_rate": 1.0
+    },
+    "anomaly": {
+      "total": 1,
+      "passed": 1,
+      "pass_rate": 1.0
+    },
+    "report": {
+      "total": 1,
+      "passed": 1,
+      "pass_rate": 1.0
+    },
+    "boundary": {
+      "total": 4,
+      "passed": 4,
+      "pass_rate": 1.0
+    },
+    "security": {
+      "total": 4,
+      "passed": 4,
+      "pass_rate": 1.0
+    },
+    "permission": {
+      "total": 4,
+      "passed": 4,
+      "pass_rate": 1.0
+    }
+  },
   "results": [
     {
       "case_id": "g001",
@@ -19,7 +70,11 @@
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g002",
@@ -32,7 +87,11 @@
       "permission_pass": null,
       "row_count": 4,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g003",
@@ -45,7 +104,11 @@
       "permission_pass": null,
       "row_count": 24,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g004",
@@ -58,7 +121,11 @@
       "permission_pass": null,
       "row_count": 4,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g005",
@@ -71,7 +138,11 @@
       "permission_pass": null,
       "row_count": 6,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g006",
@@ -84,7 +155,11 @@
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g007",
@@ -97,7 +172,11 @@
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g008",
@@ -110,7 +189,11 @@
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g009",
@@ -123,7 +206,11 @@
       "permission_pass": null,
       "row_count": 4,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g010",
@@ -136,7 +223,11 @@
       "permission_pass": null,
       "row_count": 4,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g011",
@@ -149,7 +240,11 @@
       "permission_pass": null,
       "row_count": 6,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g012",
@@ -162,7 +257,11 @@
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g013",
@@ -175,7 +274,11 @@
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g014",
@@ -188,7 +291,11 @@
       "permission_pass": null,
       "row_count": 4,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g015",
@@ -201,7 +308,11 @@
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g016",
@@ -214,7 +325,11 @@
       "permission_pass": null,
       "row_count": 12,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g017",
@@ -227,7 +342,11 @@
       "permission_pass": null,
       "row_count": 6,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g018",
@@ -240,7 +359,11 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 84
+      "latency_ms": 330,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g019",
@@ -253,7 +376,11 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 120
+      "latency_ms": 401,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g020",
@@ -266,7 +393,11 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 318
+      "latency_ms": 1130,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g021",
@@ -279,7 +410,11 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 65
+      "latency_ms": 208,
+      "executable": false,
+      "should_reject": true,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g022",
@@ -292,7 +427,11 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 67
+      "latency_ms": 289,
+      "executable": false,
+      "should_reject": true,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g023",
@@ -305,7 +444,11 @@
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g024",
@@ -318,7 +461,11 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g025",
@@ -331,7 +478,11 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 73
+      "latency_ms": 379,
+      "executable": false,
+      "should_reject": true,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g026",
@@ -344,7 +495,11 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 65
+      "latency_ms": 204,
+      "executable": false,
+      "should_reject": true,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g027",
@@ -357,7 +512,11 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 61
+      "latency_ms": 193,
+      "executable": false,
+      "should_reject": true,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g028",
@@ -370,7 +529,11 @@
       "permission_pass": null,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 54
+      "latency_ms": 185,
+      "executable": false,
+      "should_reject": true,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g029",
@@ -383,7 +546,11 @@
       "permission_pass": true,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 57
+      "latency_ms": 186,
+      "executable": false,
+      "should_reject": false,
+      "should_deny": true,
+      "should_allow": false
     },
     {
       "case_id": "g030",
@@ -391,12 +558,16 @@
       "category": "permission",
       "passed": true,
       "intent_match": true,
-      "execution_success": false,
+      "execution_success": true,
       "result_accuracy": null,
       "permission_pass": true,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 126
+      "latency_ms": 353,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": true
     },
     {
       "case_id": "g031",
@@ -404,12 +575,16 @@
       "category": "permission",
       "passed": true,
       "intent_match": true,
-      "execution_success": false,
+      "execution_success": true,
       "result_accuracy": null,
       "permission_pass": true,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 197
+      "latency_ms": 339,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": true
     },
     {
       "case_id": "g032",
@@ -422,7 +597,11 @@
       "permission_pass": true,
       "row_count": 0,
       "errors": [],
-      "latency_ms": 54
+      "latency_ms": 271,
+      "executable": false,
+      "should_reject": false,
+      "should_deny": true,
+      "should_allow": false
     },
     {
       "case_id": "g033",
@@ -435,7 +614,11 @@
       "permission_pass": null,
       "row_count": 2,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g034",
@@ -448,7 +631,11 @@
       "permission_pass": null,
       "row_count": 4,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     },
     {
       "case_id": "g035",
@@ -461,7 +648,11 @@
       "permission_pass": null,
       "row_count": 1,
       "errors": [],
-      "latency_ms": 0
+      "latency_ms": 0,
+      "executable": true,
+      "should_reject": false,
+      "should_deny": false,
+      "should_allow": false
     }
   ]
 }

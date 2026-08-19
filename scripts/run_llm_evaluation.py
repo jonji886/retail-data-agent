@@ -1,6 +1,14 @@
 """LLM E2E Evaluation：在有 API Key 时运行 LLM 增强链路评测。
 
-无 API Key 时明确 skip，不影响测试套件。
+运行模式说明：
+- mode=deterministic：由 scripts/run_evaluation.py 生成，不调用 LLM。
+- mode=llm：本脚本生成，真实调用 LLM 解析问题并构建 Query Plan。
+
+无 API Key 时明确 skip，并删除可能残留的旧报告，避免误导：
+不要出现 "100% pass 但 0 LLM calls" 的无证据报告。
+
+报告至少包含：model / cases / passed / plan_accuracy / llm_calls /
+fallback_count / fallback_rate，且按用例预期行为判定 PASS。
 """
 
 from __future__ import annotations
@@ -9,28 +17,135 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, List, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.agent.graph import run_agent
-from app.llm.deepseek_client import load_env_file
+from app.llm.deepseek_client import DeepSeekConfig, load_env_file
 from app.quality.evaluation import _load_cases
+
+REPORT_PATH = ROOT / "reports" / "llm_evaluation_report.json"
+
+
+def _llm_entries(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """state 中的 llm_calls 记录。"""
+    return list(state.get("llm_calls", []))
+
+
+def _count_success_calls(entries: List[Dict[str, Any]]) -> int:
+    """真实完成的 LLM 调用次数（status=success）。"""
+    return sum(1 for e in entries if e.get("status") == "success")
+
+
+def _count_fallbacks(entries: List[Dict[str, Any]]) -> int:
+    """触发确定性 fallback 的次数（LLM 不可用或输出非法）。"""
+    return sum(1 for e in entries if e.get("status") == "fallback")
+
+
+def _check_case(state: Dict[str, Any], case: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    """按用例预期行为判定 PASS，与确定性评测语义一致：
+    - 拒绝类：intent=unsupported 且不发生工具执行
+    - 权限拒绝：permission=deny 且不发生工具执行
+    - 权限允许：permission=allow + 预期 filter + 执行成功
+    - 常规/归因/异常/报告：intent 正确 + 无错误 + 执行成功
+    返回 (passed, 原因列表)。
+    """
+    errors: List[str] = []
+    intent = state.get("intent")
+    if case.get("should_reject"):
+        if intent != "unsupported":
+            errors.append("should_reject but intent=%s" % intent)
+        if state.get("tool_calls"):
+            errors.append("expected no tool execution but got tool_calls")
+        return not errors, errors
+    if case.get("should_deny"):
+        if state.get("permission_decision") != "deny":
+            errors.append("should_deny but permission=%s" % state.get("permission_decision"))
+        if state.get("tool_calls"):
+            errors.append("expected no tool execution but got tool_calls")
+        return not errors, errors
+    if case.get("should_allow"):
+        if state.get("permission_decision") != "allow":
+            errors.append("should_allow but permission=%s" % state.get("permission_decision"))
+        result = state.get("result") or {}
+        if not result.get("success"):
+            errors.append("allowed query execution failed: %s" % result.get("error_message"))
+        plan = state.get("query_plan", {})
+        for k, v in case.get("expected_filter", {}).items():
+            if plan.get("filters", {}).get(k) != v:
+                errors.append("expected_filter %s=%s but got %s" % (k, v, plan.get("filters", {}).get(k)))
+        return not errors, errors
+
+    expected = case.get("intent")
+    if case.get("baseline_only"):
+        if intent not in ("metric_query", "trend_analysis"):
+            errors.append("intent=%s expected metric_query/trend_analysis" % intent)
+    elif expected == "trend_analysis":
+        # 趋势类问题允许 metric_query / trend_analysis 两种合法 plan intent
+        if intent not in ("metric_query", "trend_analysis"):
+            errors.append("intent=%s expected metric_query/trend_analysis" % intent)
+    elif expected and intent != expected:
+        errors.append("intent=%s expected=%s" % (intent, expected))
+
+    if state.get("error_type"):
+        errors.append("error_type=%s: %s" % (state.get("error_type"), state.get("error_message")))
+    result = state.get("result") or {}
+    if expected in ("attribution_analysis", "anomaly_analysis", "report_generation"):
+        if not result.get("success"):
+            errors.append("skill failed: %s" % result.get("error_message"))
+    elif not result.get("success"):
+        errors.append("query execution failed: %s" % result.get("error_message"))
+    return not errors, errors
+
+
+def _check_ground_truth(state: Dict[str, Any], case: Dict[str, Any]) -> Tuple[bool, str]:
+    """可选的 ground truth 数值校验（存在时检查行数与聚合值）。"""
+    gt = case.get("ground_truth")
+    if not gt:
+        return True, ""
+    result = state.get("result") or {}
+    rows = result.get("rows") or []
+    tolerance = gt.get("tolerance", 0.01)
+    if gt.get("row_count") is not None and len(rows) != gt["row_count"]:
+        return False, "row_count=%d expected=%d" % (len(rows), gt["row_count"])
+    if gt.get("value") is not None:
+        actual = sum(float(r.get("value") or r.get("current_value") or 0) for r in rows)
+        if abs(actual - gt["value"]) > tolerance:
+            return False, "value=%.2f expected=%.2f" % (actual, gt["value"])
+    return True, ""
+
+
+def _delete_stale_report() -> None:
+    """无 Key 运行时删除旧报告，避免误导性 '0 LLM calls / 100% pass' 残留。"""
+    if REPORT_PATH.exists():
+        REPORT_PATH.unlink()
+        print("已删除过期 LLM 报告（避免 '0 LLM calls / 100% pass' 误导）: %s" % REPORT_PATH)
 
 
 def main() -> None:
     load_env_file(ROOT / ".env")
-    if not os.getenv("DEEPSEEK_API_KEY", "").strip():
-        print("SKIP: 未配置 DEEPSEEK_API_KEY，LLM E2E 评测跳过。")
+    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if not api_key:
+        _delete_stale_report()
+        print("SKIP: 未配置 DEEPSEEK_API_KEY，LLM E2E 评测跳过（不会生成报告）。")
         print("确定性 baseline 评测请运行: python3 scripts/run_evaluation.py")
         return
 
+    model = os.getenv("DEEPSEEK_MODEL", DeepSeekConfig.from_env(ROOT).model)
     cases = _load_cases(ROOT)
-    print("Running LLM E2E evaluation on %d cases..." % len(cases))
-    results = []
+    print("Running LLM E2E evaluation on %d cases (model=%s)..." % (len(cases), model))
+
+    results: List[Dict[str, Any]] = []
     total_llm_calls = 0
-    total_latency = 0
+    total_fallbacks = 0
+    total_latency = 0.0
+    plan_correct = 0
+    executable_cases = 0
+    exec_success = 0
 
     for case in cases:
         question = case["question"]
@@ -44,55 +159,81 @@ def main() -> None:
         )
         latency = time.monotonic() - start
         total_latency += latency
-        llm_calls = len(state.get("llm_calls", []))
+
+        entries = _llm_entries(state)
+        llm_calls = _count_success_calls(entries)
+        fallback = _count_fallbacks(entries)
         total_llm_calls += llm_calls
-        passed = _check_case(state, case)
+        total_fallbacks += fallback
+
+        intent_ok = state.get("intent") == case.get("intent")
+        if case.get("baseline_only") or case.get("intent") == "trend_analysis":
+            intent_ok = state.get("intent") in ("metric_query", "trend_analysis")
+        if intent_ok:
+            plan_correct += 1
+
+        passed, case_errors = _check_case(state, case)
+        gt_ok, gt_error = _check_ground_truth(state, case)
+        if passed and not gt_ok:
+            passed = False
+            case_errors.append("ground_truth mismatch: %s" % gt_error)
+
+        executable = not (case.get("should_reject") or case.get("should_deny"))
+        if executable:
+            executable_cases += 1
+            result = state.get("result") or {}
+            if passed and (bool(result.get("success")) or case.get("expect_empty")):
+                exec_success += 1
+
         results.append({
-            "case_id": case["id"], "question": question,
+            "case_id": case["id"], "question": question, "category": case.get("category"),
             "passed": passed, "intent": state.get("intent"),
-            "latency_ms": int(latency * 1000), "llm_calls": llm_calls,
+            "permission_decision": state.get("permission_decision"),
+            "latency_ms": int(latency * 1000),
+            "llm_calls": llm_calls, "fallback": fallback > 0,
             "error_type": state.get("error_type"),
+            "errors": case_errors,
         })
-        print("[%s] %s (intent=%s, llm_calls=%d, %.1fs)" % (
+        print("[%s] %s (intent=%s, llm_calls=%d, fallback=%s, %.1fs)" % (
             "PASS" if passed else "FAIL", case["id"], state.get("intent"),
-            llm_calls, latency))
+            llm_calls, fallback > 0, latency))
 
     passed = sum(1 for r in results if r["passed"])
+    fallback_rate = total_fallbacks / len(results) if results else 0
     print("\nLLM E2E Result: %d/%d passed" % (passed, len(results)))
+    print("Model: %s" % model)
     print("Total LLM calls: %d" % total_llm_calls)
+    print("Fallback count: %d (rate=%.2f)" % (total_fallbacks, fallback_rate))
     print("Total latency: %.1fs" % total_latency)
-    print("Avg LLM calls per case: %.1f" % (total_llm_calls / len(results) if results else 0))
+    failed = [r for r in results if not r["passed"]]
+    if failed:
+        print("Failed cases:")
+        for r in failed:
+            print("  [%s] %s -> %s" % (r["case_id"], r["question"], "; ".join(r["errors"])))
 
-    report = {
+    report: Dict[str, Any] = {
+        "mode": "llm",
+        "model": model,
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "note": "LLM-enabled evaluation：真实调用 LLM 构建 Query Plan。"
+                "fallback 表示 LLM 不可用或输出非法时回退确定性解析。"
+                "已知差异：相对时间窗口（如'过去3个月'）的解析结果可能"
+                "与确定性引擎不同，导致 ground truth 校验失败。",
         "total": len(results), "passed": passed,
-        "pass_rate": passed / len(results) if results else 0,
+        "overall_pass_rate": passed / len(results) if results else 0,
+        "plan_accuracy": plan_correct / len(results) if results else 0,
+        "executable_cases": executable_cases,
+        "non_executable_cases": len(results) - executable_cases,
+        "executable_success_rate": exec_success / executable_cases if executable_cases else None,
         "total_llm_calls": total_llm_calls,
+        "fallback_count": total_fallbacks,
+        "fallback_rate": fallback_rate,
         "total_latency_s": total_latency,
         "results": results,
     }
-    report_path = ROOT / "reports" / "llm_evaluation_report.json"
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print("Report written to: %s" % report_path)
-
-
-def _check_case(state: dict, case: dict) -> bool:
-    intent = state.get("intent")
-    if case.get("should_reject") and intent != "unsupported":
-        return False
-    if case.get("should_deny") and state.get("permission_decision") != "deny":
-        return False
-    if case.get("should_allow") and state.get("permission_decision") != "allow":
-        return False
-    # baseline_only 用例：Agent 会识别为 trend_analysis，允许 metric_query 或 trend_analysis
-    if case.get("baseline_only"):
-        if intent not in ("metric_query", "trend_analysis"):
-            return False
-    elif case.get("intent") and intent != case["intent"]:
-        return False
-    if state.get("error_type") and not case.get("should_reject") and not case.get("should_deny"):
-        return False
-    return True
+    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    REPORT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print("Report written to: %s" % REPORT_PATH)
 
 
 if __name__ == "__main__":
