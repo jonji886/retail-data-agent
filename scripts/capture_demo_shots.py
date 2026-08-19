@@ -77,21 +77,20 @@ def main() -> None:
         # Tab 1: Agent 归因场景
         page.get_by_text("Agent", exact=True).first.click()
         time.sleep(2)
-        input_el = page.locator("textarea").first
+        # Streamlit st.text_input 渲染为 <input> role=textbox
+        input_el = page.get_by_role("textbox").first
         input_el.fill(QUESTION)
-        page.get_by_role("button", name="运行").first.click()
-        time.sleep(6)
+        page.get_by_role("button", name="执行 Agent", exact=True).first.click()
+        time.sleep(8)
         page.screenshot(path=str(ASSETS / "agent-demo.png"), full_page=False)
         print("saved docs/assets/agent-demo.png")
 
         # 展开执行链路 / Trace
-        for label in ("执行明细", "Trace", "trace", "query plan", "Query Plan"):
-            try:
-                page.get_by_text(label, exact=False).first.click()
-                time.sleep(2)
-                break
-            except Exception:
-                continue
+        try:
+            page.get_by_text("查看 SQL、指标口径与 Trace", exact=False).first.click()
+            time.sleep(2)
+        except Exception:
+            pass
         page.screenshot(path=str(ASSETS / "agent-trace.png"), full_page=False)
         print("saved docs/assets/agent-trace.png")
 
