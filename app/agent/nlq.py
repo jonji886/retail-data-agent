@@ -174,12 +174,12 @@ class NaturalLanguageQueryEngine:
         return filters
 
     def _match_date_range(self, question: str) -> DateRange:
-        year_month = re.search(r"(20\d{2})年\s*(\d{1,2})月", question)
+        year_month = re.search(r"(20\d{2})\s*年\s*(\d{1,2})\s*月", question)
         if year_month:
             year, month = int(year_month.group(1)), int(year_month.group(2))
             return DateRange(_first_day(year, month), _last_day(year, month), "month", "%d年%d月" % (year, month))
 
-        month_only = re.search(r"(?<!\d)(\d{1,2})月", question)
+        month_only = re.search(r"(?<!\d)(\d{1,2})\s*月", question)
         if month_only:
             month = int(month_only.group(1))
             year = self.reference_date.year

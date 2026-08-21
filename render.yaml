@@ -13,6 +13,9 @@ services:
         value: "8000"
       - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
         value: "false"
+      # Render 容器不需要开发态热加载；关闭 watchdog，避免低配实例触发 inotify 上限。
+      - key: STREAMLIT_SERVER_FILE_WATCHER_TYPE
+        value: none
       - key: LLM_PROVIDER
         value: deepseek
       - key: DEEPSEEK_API_KEY

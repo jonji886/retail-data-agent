@@ -133,7 +133,7 @@ Last verified: 2026-08-21
 2. `Golden Dataset 数量（35）== README 描述 == 评测报告 total`；
 3. `Web Demo Tab 数量（6）== README 描述 == web_app.py 实际`；
 4. `Overall Pass Rate` 与 `Executable Success Rate` 口径可解释、不冲突；
-5. 全部单元测试通过（当前 19 文件 / 119 用例）；
+5. 全部单元测试通过（当前 19 文件 / 120 用例）；
 6. 任何指标或能力声明都能在代码 / 测试 / 报告中找到证据。
 
 ## 9. Future（Out of Scope，未实现不宣传）

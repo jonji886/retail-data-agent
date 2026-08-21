@@ -94,6 +94,8 @@ OPENROUTER_APP_TITLE=Retail Data Agent
 
 `DATABASE_URL`、`OPENROUTER_API_KEY`、`DEEPSEEK_API_KEY` 和 `EVAL_LLM_MODEL` 不能写入仓库。保存环境变量后需要执行一次 **Manual Deploy → Deploy latest commit**，新进程才会读取配置。治理后台会显示 DeepSeek 主 Provider、模型可用性和 OpenRouter fallback 状态。
 
+Render 生产容器通过 `--server.fileWatcherType=none` 关闭 Streamlit 开发态文件监听。这样不影响用户点击后的脚本重跑，但可以避免 Free 实例因 watchdog / inotify 实例上限导致页面交互异常；本地开发仍可直接使用默认文件监听。
+
 DeepSeek 的模型调用费用由 DeepSeek 账户承担，OpenRouter fallback 的费用由 OpenRouter 账户承担，Render Free 不包含任何模型调用额度。每次调用先走 DeepSeek；按 `LLM_MAX_RETRIES` 有限重试仍超时或报错时，如果配置了 `OPENROUTER_API_KEY`，同一请求最多切换一次 OpenRouter；两个 Provider 都失败后才回退确定性结果。LLM 只生成结构化查询计划或文字表达，权限、指标口径、SQL 和计算仍由本地链路负责；治理后台会标记实际 provider 与 fallback reason。
 
 ## 4. 部署后验证

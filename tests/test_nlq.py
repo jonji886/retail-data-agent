@@ -14,6 +14,12 @@ class NaturalLanguageQueryTest(unittest.TestCase):
         self.assertEqual(parsed.filters["region_name"], "华东")
         self.assertEqual(parsed.date_range.start.isoformat(), "2025-11-01")
 
+    def test_parses_month_with_spaces_used_by_demo_prompt(self) -> None:
+        parsed = self.engine.parse("华东区域 2025 年 11 月销售额是多少？环比怎么样？")
+        self.assertEqual(parsed.date_range.start.isoformat(), "2025-11-01")
+        self.assertEqual(parsed.date_range.end.isoformat(), "2025-11-30")
+        self.assertEqual(parsed.comparison, "mom")
+
     def test_parses_group_dimension_and_yoy(self) -> None:
         parsed = self.engine.parse("本月各区域销售额同比变化")
         self.assertEqual(parsed.dimensions, ["region_name"])
@@ -31,4 +37,3 @@ class NaturalLanguageQueryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
