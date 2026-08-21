@@ -49,7 +49,7 @@ class SQLExecutionPolicy:
 
 
 _FORBIDDEN = re.compile(
-    r"\b(insert|update|delete|drop|alter|create|copy|attach|detach|pragma|install|load)\b",
+    r"\b(insert|update|delete|drop|alter|create|truncate|call|copy|attach|detach|pragma|install|load)\b",
     re.IGNORECASE,
 )
 
@@ -116,12 +116,12 @@ class ReadOnlySQLRunner:
             )
         return normalized
 
-    def query(self, sql: str) -> List[Dict[str, Any]]:
+    def query(self, sql: str, params: Optional[List[Any]] = None) -> List[Dict[str, Any]]:
         safe_sql = self.validate(sql)
         connection = open_readonly_connection(self.database_path, self.policy)
         try:
             try:
-                cursor = connection.execute(safe_sql)
+                cursor = connection.execute(safe_sql, params or [])
                 rows = cursor.fetchmany(self.policy.max_result_rows + 1)
             except Exception as exc:  # noqa: BLE001
                 if _is_external_access_error(exc):

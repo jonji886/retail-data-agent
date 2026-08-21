@@ -36,6 +36,14 @@ class SQLSecurityTest(unittest.TestCase):
         with self.assertRaises(SQLSafetyError):
             ReadOnlySQLRunner.validate("ALTER TABLE dim_store ADD COLUMN x int")
 
+    def test_rejects_truncate(self) -> None:
+        with self.assertRaises(SQLSafetyError):
+            ReadOnlySQLRunner.validate("TRUNCATE TABLE fact_sales_daily")
+
+    def test_rejects_call(self) -> None:
+        with self.assertRaises(SQLSafetyError):
+            ReadOnlySQLRunner.validate("CALL refresh_sales_summary()")
+
     def test_rejects_multiple_statements(self) -> None:
         with self.assertRaises(SQLSafetyError):
             ReadOnlySQLRunner.validate("SELECT 1; DROP TABLE fact_sales_daily")

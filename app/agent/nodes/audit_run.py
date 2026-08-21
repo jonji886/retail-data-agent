@@ -66,6 +66,9 @@ def audit_run(state: AgentState) -> AgentState:
         tool_calls=state.get("tool_calls", []),
         trace_events=events,
         llm_calls=state.get("llm_calls", []),
+        provider=(state.get("llm_calls") or [{}])[0].get("provider", "") if state.get("llm_calls") else "",
+        model=next((item.get("model", "") for item in state.get("llm_calls", []) if item.get("model")), ""),
+        datasource=state.get("datasource", ""),
         event_id=event_id,
     )
 

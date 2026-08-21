@@ -40,6 +40,7 @@ def execute_skill(state: AgentState) -> AgentState:
             "authorized_filters": dict(authorized_filters),
             "user_id": state.get("user_id", "user_hq"),
             "role": state.get("role", "hq_manager"),
+            "data_source": state.get("_data_source"),
         }
         result = skill(plan, context)
     except KeyError as exc:

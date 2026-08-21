@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from app.agent.contracts import ErrorType, ToolResult
+from app.data_sources.base import DataSourceBase, DataSourceError, DataSourceTimeoutError
+from app.data_sources.duckdb import DuckDBDataSource
 from app.semantic_layer.catalog import MetricCatalog, SemanticLayerError
-from app.tools.sql_runner import ReadOnlySQLRunner, SQLSafetyError
+from app.tools.sql_runner import SQLSafetyError
 
 
 def _month_range(year: int, month: int) -> Tuple[date, date]:
@@ -51,10 +53,10 @@ def comparison_range(start: date, end: date, comparison: str) -> Tuple[date, dat
 class MetricQueryTool:
     """通过语义层生成只读 SQL 并执行，返回结构与 ToolResult 对齐。"""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, data_source: Optional[DataSourceBase] = None) -> None:
         self.root = root
         self.catalog = MetricCatalog.from_file(root / "configs" / "metrics" / "metrics.json")
-        self.runner = ReadOnlySQLRunner(root / "data" / "retail.duckdb")
+        self.data_source = data_source or DuckDBDataSource(root / "data" / "retail.duckdb")
 
     def query(
         self,
@@ -82,7 +84,7 @@ class MetricQueryTool:
                 metadata={"metric": metric, "dimensions": dims, "filters": filter_map},
             )
         try:
-            current_rows = self.runner.query(current_sql)
+            current_rows = self.data_source.execute_readonly(current_sql)
         except SQLSafetyError as exc:
             return ToolResult(
                 success=False,
@@ -94,7 +96,13 @@ class MetricQueryTool:
                     "guard_stage": exc.guard_stage,
                 },
             )
-        except Exception:  # noqa: BLE001
+        except DataSourceTimeoutError:
+            return ToolResult(
+                success=False, error_type=ErrorType.QUERY_TIMEOUT,
+                error_message="查询超时，请缩小时间范围或稍后重试",
+                metadata={"sql": current_sql, "reason_code": "query_timeout"},
+            )
+        except DataSourceError:
             return ToolResult(
                 success=False,
                 error_type=ErrorType.QUERY_ERROR,
@@ -113,7 +121,7 @@ class MetricQueryTool:
                     metric, dimensions=dims, time_grain=time_grain,
                     start_date=ps.isoformat(), end_date=pe.isoformat(), filters=filter_map,
                 )
-                previous_rows = self.runner.query(comparison_sql)
+                previous_rows = self.data_source.execute_readonly(comparison_sql)
                 merged_rows = self._merge_comparison(current_rows, previous_rows, time_grain)
             except SQLSafetyError as exc:
                 return ToolResult(
@@ -126,7 +134,13 @@ class MetricQueryTool:
                         "guard_stage": exc.guard_stage,
                     },
                 )
-            except Exception:  # noqa: BLE001
+            except DataSourceTimeoutError:
+                return ToolResult(
+                    success=False, error_type=ErrorType.QUERY_TIMEOUT,
+                    error_message="对比查询超时，请缩小时间范围或稍后重试",
+                    metadata={"sql": comparison_sql, "reason_code": "query_timeout"},
+                )
+            except DataSourceError:
                 # 对比失败不致命，保留当前值
                 pass
 

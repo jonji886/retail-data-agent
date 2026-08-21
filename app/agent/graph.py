@@ -32,6 +32,8 @@ from app.agent.router import (
     route_after_validate,
 )
 from app.agent.state import AgentState
+from app.data_sources.base import DataSourceBase
+from app.data_sources.factory import create_data_source
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +130,7 @@ def run_agent(
     data_scope: Optional[Dict[str, Any]] = None,
     use_llm: bool = False,
     thread_id: str = "",
+    data_source: Optional[DataSourceBase] = None,
 ) -> AgentState:
     """运行一次完整的 Agent 流程，返回最终 state。"""
     root = root or Path(".")
@@ -137,9 +140,17 @@ def run_agent(
     # 注入运行时上下文（非 TypedDict 字段，但 dict 允许）
     state["_root"] = str(root)  # type: ignore[typeddict-unknown-key]
     state["_use_llm"] = use_llm  # type: ignore[typeddict-unknown-key]
+    owned_data_source = data_source is None
+    selected_data_source = data_source or create_data_source(root)
+    state["_data_source"] = selected_data_source  # type: ignore[typeddict-unknown-key]
+    state["datasource"] = selected_data_source.dialect
     app = build_graph()
-    final_state = app.invoke(state)
-    # 清理内部字段
-    final_state.pop("_root", None)  # type: ignore[misc]
-    final_state.pop("_use_llm", None)  # type: ignore[misc]
-    return final_state
+    try:
+        final_state = app.invoke(state)
+        final_state.pop("_root", None)  # type: ignore[misc]
+        final_state.pop("_use_llm", None)  # type: ignore[misc]
+        final_state.pop("_data_source", None)  # type: ignore[misc]
+        return final_state
+    finally:
+        if owned_data_source:
+            selected_data_source.close()

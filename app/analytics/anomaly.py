@@ -7,7 +7,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from app.tools.sql_runner import open_readonly_connection
+from app.data_sources.base import DataSourceBase
+from app.data_sources.duckdb import DuckDBDataSource
 
 
 @dataclass(frozen=True)
@@ -49,8 +50,9 @@ def _previous_month(month: str, offset: int) -> str:
 
 
 class SalesAnomalyDetector:
-    def __init__(self, database_path: Path) -> None:
-        self.database_path = database_path
+    def __init__(self, database_path: Optional[Path] = None,
+                 data_source: Optional[DataSourceBase] = None) -> None:
+        self.data_source = data_source or DuckDBDataSource(database_path or Path("data/retail.duckdb"))
 
     def detect(
         self,
@@ -81,10 +83,8 @@ class SalesAnomalyDetector:
         if store_id:
             scope_sql += " AND store_id = ?"
             scope_params.append(store_id)
-        connection = open_readonly_connection(self.database_path)
-        try:
-            rows = connection.execute(
-                """
+        rows_dict = self.data_source.execute_readonly(
+            """
                 SELECT date_trunc('month', sale_date) AS month_start,
                        %s AS entity_id,
                        %s AS entity_name,
@@ -94,10 +94,9 @@ class SalesAnomalyDetector:
                 GROUP BY 1, 2, 3
                 ORDER BY 1, 2
                 """ % (id_column, name_column, scope_sql),
-                [baseline_start.isoformat(), current_end.isoformat()] + scope_params,
-            ).fetchall()
-        finally:
-            connection.close()
+            [baseline_start.isoformat(), current_end.isoformat()] + scope_params,
+        )
+        rows = [tuple(row.values()) for row in rows_dict]
 
         current_values: Dict[str, Tuple[str, float]] = {}
         baseline_values: Dict[str, List[float]] = {}

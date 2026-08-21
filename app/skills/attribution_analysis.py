@@ -23,7 +23,7 @@ def attribution_analysis_skill(plan: QueryPlan, context: Dict[str, Any]) -> Dict
     # 门店经理无法跨门店归因，默认拆解本门店内的品类贡献。
     dimension = plan.attribution_dimension or ("category_name" if store_id else "store_name")
 
-    attributor = SalesAttributor(database_path)
+    attributor = SalesAttributor(database_path, data_source=context.get("data_source"))
     try:
         result = attributor.analyze(month, dimension=dimension, region_name=region_name, store_id=store_id)
     except ValueError as exc:

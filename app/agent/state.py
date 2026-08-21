@@ -24,6 +24,7 @@ class AgentState(TypedDict, total=False):
     user_id: str
     role: str
     data_scope: Dict[str, Any]
+    datasource: str
 
     # 意图与查询计划
     intent: str
@@ -59,6 +60,7 @@ class AgentState(TypedDict, total=False):
     # 否则 LangGraph 编译后节点收不到这些键，导致 use_llm 静默失效）
     _root: str
     _use_llm: bool
+    _data_source: Any
 
 
 def new_state(question: str, user_id: str = "user_hq", role: str = "hq_manager",

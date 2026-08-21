@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 
 from app.agent.graph import run_agent
 from app.agent.nlq import NLQError, NaturalLanguageQueryEngine
+from app.data_sources.duckdb import DuckDBDataSource
 
 
 @dataclass(frozen=True)
@@ -132,7 +133,15 @@ def _run_agent_case(root: Path, case: Dict[str, Any]) -> EvaluationResult:
     role = case.get("role", "hq_manager")
     data_scope = case.get("data_scope", {"scope": "all"})
 
-    state = run_agent(question, root, user_id=user_id, role=role, data_scope=data_scope)
+    # 确定性评测固定使用本地 DuckDB，不受 DATA_SOURCE 环境变量影响。
+    evaluation_source = DuckDBDataSource(root / "data" / "retail.duckdb")
+    try:
+        state = run_agent(
+            question, root, user_id=user_id, role=role, data_scope=data_scope,
+            data_source=evaluation_source,
+        )
+    finally:
+        evaluation_source.close()
     latency_ms = int((time.monotonic() - start) * 1000)
 
     intent_match = state.get("intent") == case.get("intent")

@@ -14,8 +14,9 @@ from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from app.domain.time_range import resolve_relative_time
+from app.data_sources.base import DataSourceBase
+from app.data_sources.duckdb import DuckDBDataSource
 from app.semantic_layer.catalog import MetricCatalog, Metric
-from app.tools.sql_runner import ReadOnlySQLRunner
 
 
 class NLQError(ValueError):
@@ -80,16 +81,17 @@ def _json(path: Path) -> Mapping[str, object]:
 class NaturalLanguageQueryEngine:
     AS_OF_DATE = date(2025, 12, 31)
 
-    def __init__(self, root: Path, reference_date: Optional[date] = None) -> None:
+    def __init__(self, root: Path, reference_date: Optional[date] = None,
+                 data_source: Optional[DataSourceBase] = None) -> None:
         self.root = root
         self.catalog = MetricCatalog.from_file(root / "configs" / "metrics" / "metrics.json")
         raw_dimensions = _json(root / "configs" / "dimensions.json")
         self.dimension_config = raw_dimensions["dimensions"]  # type: ignore[index]
-        self.runner = ReadOnlySQLRunner(root / "data" / "retail.duckdb")
+        self.data_source = data_source or DuckDBDataSource(root / "data" / "retail.duckdb")
         self.reference_date = reference_date or self._latest_data_date()
 
     def _latest_data_date(self) -> date:
-        rows = self.runner.query("SELECT MAX(sale_date) AS latest_date FROM fact_sales_daily")
+        rows = self.data_source.execute_readonly("SELECT MAX(sale_date) AS latest_date FROM fact_sales_daily")
         latest = rows[0].get("latest_date") if rows else None
         return latest if isinstance(latest, date) else self.AS_OF_DATE
 
@@ -116,7 +118,7 @@ class NaturalLanguageQueryEngine:
             end_date=parsed.date_range.end.isoformat(),
             filters=parsed.filters,
         )
-        current_rows = self.runner.query(current_sql)
+        current_rows = self.data_source.execute_readonly(current_sql)
         comparison_sql = None
         if parsed.comparison:
             previous = self._comparison_range(parsed.date_range, parsed.comparison)
@@ -128,7 +130,7 @@ class NaturalLanguageQueryEngine:
                 end_date=previous.end.isoformat(),
                 filters=parsed.filters,
             )
-            previous_rows = self.runner.query(comparison_sql)
+            previous_rows = self.data_source.execute_readonly(comparison_sql)
             current_rows = self._merge_comparison(current_rows, previous_rows, parsed.date_range.time_grain)
         explanation = self._explain(parsed, current_rows)
         return Answer(question=question or parsed.question, parsed=parsed, sql=current_sql, rows=current_rows, explanation=explanation, comparison_sql=comparison_sql)

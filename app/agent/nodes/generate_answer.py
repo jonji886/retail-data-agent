@@ -36,22 +36,25 @@ def generate_answer(state: AgentState) -> AgentState:
         if not _llm_available(root):
             llm_calls.append({
                 "provider": "openrouter", "node": "generate_answer",
-                "status": "fallback", "error": "OPENROUTER_API_KEY 未配置",
+                "status": "fallback", "model": _configured_model(root),
+                "fallback_model": "deterministic", "reason": "provider_not_configured",
             })
         else:
             try:
-                llm_answer = _llm_summarize(root, intent, result, question, template_answer)
+                llm_answer, metadata = _llm_summarize(root, intent, result, question, template_answer)
                 if llm_answer:
                     answer = llm_answer
                     llm_calls.append({
                         "provider": "openrouter", "node": "generate_answer",
                         "status": "success", "model": _configured_model(root),
                         "prompt_version": "v1",
+                        **metadata,
                     })
             except Exception as exc:  # noqa: BLE001
                 llm_calls.append({
                     "provider": "openrouter", "node": "generate_answer",
-                    "status": "fallback", "error": str(exc),
+                    "status": "fallback", "model": _configured_model(root),
+                    "fallback_model": "deterministic", "reason": type(exc).__name__,
                 })
                 # LLM 失败时使用模板回答
 
@@ -74,11 +77,11 @@ def _configured_model(root: Path) -> str:
     from app.llm.openrouter_client import DEFAULT_MODEL, load_env_file
     import os
     load_env_file(root / ".env")
-    return os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    return os.getenv("LLM_MODEL", "").strip() or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
 
 
 def _llm_summarize(root: Path, intent: str, result: Dict[str, Any],
-                   question: str, template: str) -> str:
+                   question: str, template: str) -> tuple[str, Dict[str, Any]]:
     """使用 OpenRouter 基于已提供的事实生成总结。"""
     from app.llm.openrouter_client import OpenRouterClient, OpenRouterConfig
     import json
@@ -93,7 +96,7 @@ def _llm_summarize(root: Path, intent: str, result: Dict[str, Any],
     )
     facts = json.dumps({"intent": intent, "question": question, "result": _safe_result(result)},
                        ensure_ascii=False, default=str)
-    return client.complete_text(system_prompt, facts, max_tokens=600)
+    return client.complete_text(system_prompt, facts, max_tokens=600), client.last_call_metadata
 
 
 def _safe_result(result: Dict[str, Any]) -> Dict[str, Any]:

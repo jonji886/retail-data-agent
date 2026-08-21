@@ -9,6 +9,8 @@ services:
     envVars:
       - key: PORT
         value: "8501"
+      - key: API_PORT
+        value: "8000"
       - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
         value: "false"
       - key: LLM_PROVIDER
@@ -19,10 +21,30 @@ services:
         value: https://openrouter.ai/api/v1
       - key: OPENROUTER_MODEL
         sync: false
+      - key: OPENROUTER_FALLBACK_MODELS
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: EVAL_LLM_MODEL
+        sync: false
       - key: OPENROUTER_TIMEOUT_SECONDS
         value: "60"
       - key: OPENROUTER_MAX_TOKENS
         value: "1200"
+      - key: LLM_MAX_RETRIES
+        value: "1"
+      - key: DATA_SOURCE
+        value: postgresql
+      - key: DATABASE_URL
+        sync: false
+      - key: DEMO_RATE_LIMIT_ENABLED
+        value: "true"
+      - key: DEMO_SESSION_LIMIT
+        value: "10"
+      - key: DEMO_IP_DAILY_LIMIT
+        value: "20"
+      - key: DEMO_GLOBAL_DAILY_LIMIT
+        value: "40"
       - key: OPENROUTER_HTTP_REFERER
         value: https://retail-data-agent.onrender.com
       - key: OPENROUTER_APP_TITLE

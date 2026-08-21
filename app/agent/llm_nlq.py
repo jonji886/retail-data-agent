@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 
 from app.agent.nlq import DateRange, NLQError, NaturalLanguageQueryEngine, ParsedQuestion
+from app.data_sources.base import DataSourceBase
 from app.domain.time_range import resolve_relative_time
 from app.llm.openrouter_client import OpenRouterClient, OpenRouterConfig
 
@@ -18,16 +19,22 @@ class LLMPlanError(NLQError):
 
 
 class OpenRouterNLQEngine:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, data_source: DataSourceBase | None = None) -> None:
         self.root = root
-        self.deterministic = NaturalLanguageQueryEngine(root)
+        self.deterministic = NaturalLanguageQueryEngine(root, data_source=data_source)
         self.config = OpenRouterConfig.from_env(root)
         self.client = OpenRouterClient(self.config)
 
     def parse(self, question: str) -> ParsedQuestion:
         """调用 OpenRouter 生成计划，再通过本地规则完成严格校验。"""
         plan_json = self.client.complete_json(self._system_prompt(), question)
-        plan = self._parse_json(plan_json)
+        try:
+            plan = self._parse_json(plan_json)
+        except LLMPlanError:
+            # 结构化输出异常只允许一次补请求；之后由 Agent 回退到确定性解析。
+            if self.config.max_retries <= 0:
+                raise
+            plan = self._parse_json(self.client.complete_json(self._system_prompt(), question))
         return self._build_parsed_question(question, plan)
 
     def answer(self, question: str):

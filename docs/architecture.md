@@ -54,27 +54,25 @@ Multi-Agent 引入的协调成本、非确定性和评测难度，对本项目�
 ## 4. 分层架构
 
 ```
-┌─────────────────────────────────────────┐
-│           Agent Layer (LangGraph)       │
-│  parse_request → policy_check →         │
-│  execute_skill → validate_result →      │
-│  generate_answer → audit_run            │
-├─────────────────────────────────────────┤
-│           Skill Layer                   │
-│  metric_query / trend_analysis /        │
-│  anomaly_analysis / attribution /       │
-│  report_generation                      │
-├─────────────────────────────────────────┤
-│           Tool Layer                    │
-│  MetricQueryTool / PermissionChecker /  │
-│  EntityResolver / MetadataTool /        │
-│  ReadOnlySQLRunner                      │
-├─────────────────────────────────────────┤
-│      Data / Semantic Layer              │
-│  MetricCatalog (metrics.json) /         │
-│  DuckDB / ReadOnlySQLRunner             │
-└─────────────────────────────────────────┘
+Streamlit UI ─┐
+              ├→ AgentApplicationService → LangGraph Runtime
+FastAPI API ──┘                                  ↓
+                                      Query Plan / Policy / Skills
+                                                   ↓
+                                          Semantic Layer + SQL Guard
+                                                   ↓
+                              DataSourceBase → DuckDB / PostgreSQL
+
+LLM：Application Service → OpenRouter Provider → Demo Router / 固定 Evaluation Model
+横切：Trace / Audit / Metrics / Quota / Retry / Fallback / Evaluation
 ```
+
+`DataSourceBase` 是业务访问边界。DuckDB 负责本地、CI 和 Deterministic Evaluation；
+`PostgreSQLDataSource` 通过连接池、连接超时、statement timeout 和只读执行访问
+Supabase。Skill、Semantic Layer 和 LangGraph 不判断底层数据库类型。
+
+`AgentApplicationService` 是 Streamlit 与 FastAPI 的共同入口，负责调用 Agent、
+Demo quota 和 Operational Metrics，避免 API 与前端产生两套业务逻辑。
 
 ### LLM 边界
 
@@ -134,12 +132,10 @@ Permission Guard
 Semantic Layer
   ↓
 Application SQL Guard（SELECT-only / 单语句 / 禁止写操作与管理操作）
+  ├→ DuckDB Capability Restriction（external access=false / 配置锁定）
+  └→ PostgreSQL Read-only Adapter（statement_timeout / 连接池）
   ↓
-DuckDB Capability Restriction（external access=false / 扩展自动加载与安装关闭）
-  ↓
-Read-only Connection（lock_configuration=true）
-  ↓
-Result Guard（max result rows / memory limit / threads）
+Result Guard（max result rows / DuckDB memory+threads）
 ```
 
 `ReadOnlySQLRunner` 校验只允许单条 `SELECT`，并拒绝
@@ -151,7 +147,8 @@ function，因此每条只读连接都显式关闭 DuckDB `enable_external_acces
 
 默认资源策略为最多返回 1000 行、512MB memory limit、2 threads，可通过
 `DB_MAX_RESULT_ROWS`、`DB_MEMORY_LIMIT`、`DB_THREADS` 做受控资源调整；没有可靠的
-跨 DuckDB 版本 hard timeout，当前 MVP 不伪装提供 query timeout。
+PostgreSQL 由连接参数提供 statement timeout；DuckDB 当前提供资源限制而不是伪装的
+跨版本 hard timeout。
 
 ## 7. Evaluation 设计
 
@@ -181,9 +178,12 @@ function，因此每条只读连接都显式关闭 DuckDB `enable_external_acces
 ### 两条链路
 
 - Deterministic Baseline：`scripts/run_evaluation.py`（无 API Key 可运行）
-- LLM E2E：`scripts/run_llm_evaluation.py`（通过 OpenRouter，需 API Key，无则 skip）
+- LLM E2E：`scripts/run_llm_evaluation.py`（通过 OpenRouter，需 API Key + 固定 `EVAL_LLM_MODEL`，无则 skip）
 
-OpenRouter 通过 OpenAI-compatible Chat Completions 接口调用。`OpenRouterNLQEngine.parse()` 每次只生成一次结构化 Query Plan，随后必须经过本地计划校验、相对时间策略、RBAC、语义层和只读 SQL 执行器；Key 缺失、网络/API 异常或计划非法时回退到确定性基线。回答润色同样只能使用已校验结果，不承担指标计算或权限判断。
+OpenRouter 通过 OpenAI-compatible Chat Completions 接口调用。`OpenRouterNLQEngine.parse()`
+在结构化输出异常时最多补请求一次，随后必须经过本地计划校验、相对时间策略、RBAC、
+语义层和只读 SQL 执行器；Key 缺失、网络/API 异常或计划非法时回退到确定性基线。
+回答润色同样只能使用已校验结果，不承担指标计算或权限判断。
 
 ### Relative Time Policy
 
@@ -217,11 +217,28 @@ Demo Badcase（`bc_demo_001`）：
 每次 Agent Run 生成 `request_id` + `trace_id`，记录每个节点的：
 - node / start_at / end_at / latency_ms / status / error
 
-LLM 调用记录：provider / model / latency / status / prompt_version（不记录 API Key）。
+LLM 调用记录：provider / model / latency / retry_count / status / token usage / prompt_version（不记录 API Key）。
 
 Tool 调用记录：tool_name / latency / status / error_type。
 
-## 10. 决策支持展示层（设计目标）
+Operational Metrics 为进程内轻量指标，至少包含 request/success/failure、请求/LLM/Tool/DB
+延迟、fallback、permission deny、unsupported、quota exceeded、provider、model 和 datasource。
+公网 Demo quota 在 LLM 请求前检查 session/IP/global daily；Evaluation 直接调用 Agent，绕过 Demo quota。
+
+## 10. API Boundary
+
+```http
+POST /api/v1/query
+GET  /health
+GET  /ready
+```
+
+`POST /api/v1/query` 接收 `user_id / question / use_llm / session_id`，返回 `run_id`、
+status、intent、answer、permission decision、error type 和 latency。`/health` 只表示
+进程存活；`/ready` 会检查语义配置与当前 DataSource。数据库不可用时 API 返回受控失败，
+不暴露驱动异常或连接串。
+
+## 11. 决策支持展示层（设计目标）
 
 Agent 的确定性结果与面向老板的页面展示是两个不同边界：前者负责计算、校验和审计，后者负责信息排序、可视化和后续行动入口。展示层不得重新计算指标，也不得把贡献结果升级为未经验证的业务因果。
 
@@ -251,9 +268,9 @@ Evidence Drawer（Plan / Permission / SQL / Trace / Audit）
 
 当前 Streamlit MVP 已实现第一版展示层：结论、KPI、贡献表与横向柱状图、核查建议以及默认折叠的依据区。展示模型位于 `app/presentation/decision_support.py`，不重新计算指标；贡献因素点击下钻、追问按钮自动执行和跨图表联动仍未实现。产品验收要求与示例见 `docs/decision-support-ui.md`。
 
-## 11. 未来扩展
+## 12. 未来扩展
 
-- DataSource Adapter（PostgreSQL / MySQL / Warehouse）
+- DataSource Adapter（MySQL / Warehouse）
 - Durable Checkpointer（Redis / PostgreSQL）
 - Human-in-the-loop（加入写操作 Tool 时）
 - 统计/时序模型预警

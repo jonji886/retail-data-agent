@@ -21,7 +21,7 @@ def report_generation_skill(plan: QueryPlan, context: Dict[str, Any]) -> Dict[st
     # 门店经理无法跨门店归因，默认拆解本门店内的品类贡献。
     dimension = plan.attribution_dimension or ("category_name" if store_id else "store_name")
 
-    builder = RetailReportBuilder(root)
+    builder = RetailReportBuilder(root, data_source=context.get("data_source"))
     report_context = builder.build_context(month, region_name, dimension, store_id=store_id)
     markdown = builder.to_markdown(report_context)
 

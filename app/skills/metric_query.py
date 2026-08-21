@@ -15,7 +15,7 @@ from app.tools.metric_query_tool import MetricQueryTool
 def metric_query_skill(plan: QueryPlan, context: Dict[str, Any]) -> Dict[str, Any]:
     root = context["root"]
     authorized_filters = context.get("authorized_filters", dict(plan.filters))
-    tool = MetricQueryTool(root)
+    tool = MetricQueryTool(root, data_source=context.get("data_source"))
     result = tool.query(
         metric=plan.metric,
         dimensions=plan.dimensions,

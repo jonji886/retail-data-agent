@@ -7,7 +7,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from app.tools.sql_runner import open_readonly_connection
+from app.data_sources.base import DataSourceBase
+from app.data_sources.duckdb import DuckDBDataSource
 
 
 @dataclass(frozen=True)
@@ -60,8 +61,9 @@ def _previous_month(month: str) -> str:
 
 
 class SalesAttributor:
-    def __init__(self, database_path: Path) -> None:
-        self.database_path = database_path
+    def __init__(self, database_path: Optional[Path] = None,
+                 data_source: Optional[DataSourceBase] = None) -> None:
+        self.data_source = data_source or DuckDBDataSource(database_path or Path("data/retail.duckdb"))
 
     def analyze(
         self,
@@ -101,11 +103,9 @@ class SalesAttributor:
             ") GROUP BY 1, 2 ORDER BY 1, 2"
             % (dimension, scope_sql, dimension, scope_sql)
         )
-        connection = open_readonly_connection(self.database_path)
-        try:
-            rows = connection.execute(query, params).fetchall()
-        finally:
-            connection.close()
+        rows = [
+            tuple(row.values()) for row in self.data_source.execute_readonly(query, params)
+        ]
 
         current: Dict[str, float] = {}
         comparison: Dict[str, float] = {}

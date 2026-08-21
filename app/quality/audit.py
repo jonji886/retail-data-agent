@@ -83,6 +83,9 @@ class AuditLogger:
         tool_calls: Optional[List[Dict[str, Any]]] = None,
         trace_events: Optional[List[Dict[str, Any]]] = None,
         llm_calls: Optional[List[Dict[str, Any]]] = None,
+        provider: str = "",
+        model: str = "",
+        datasource: str = "",
         event_id: str = "",
     ) -> str:
         """记录一次完整 Agent Run 的审计信息（不记录敏感凭证）。
@@ -112,6 +115,9 @@ class AuditLogger:
             "tool_calls": tool_calls or [],
             "trace_events": trace_events or [],
             "llm_calls": llm_calls or [],
+            "provider": provider,
+            "model": model,
+            "datasource": datasource,
         }
         self._append(self.audit_path, payload)
         return event_id
@@ -146,4 +152,3 @@ class AuditLogger:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
-

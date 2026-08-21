@@ -11,25 +11,23 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from app.agent.contracts import ToolResult
-from app.tools.sql_runner import open_readonly_connection
+from app.data_sources.base import DataSourceBase
+from app.data_sources.duckdb import DuckDBDataSource
 
 
 class MetadataTool:
     """提供数据集元信息，供 parse_request 与 generate_answer 使用。"""
 
-    def __init__(self, database_path: Path) -> None:
-        self.database_path = database_path
+    def __init__(self, database_path: Optional[Path] = None, data_source: Optional[DataSourceBase] = None) -> None:
+        self.data_source = data_source or DuckDBDataSource(database_path or Path("data/retail.duckdb"))
 
     def get_data_context(self) -> Dict[str, Any]:
         """返回 {dataset_min_date, dataset_max_date, latest_data_date, timezone, last_refresh_at}。"""
-        connection = open_readonly_connection(self.database_path)
-        try:
-            row = connection.execute(
-                "SELECT MIN(sale_date), MAX(sale_date) FROM fact_sales_daily"
-            ).fetchone()
-        finally:
-            connection.close()
-        min_date, max_date = row if row else (None, None)
+        rows = self.data_source.execute_readonly(
+            "SELECT MIN(sale_date) AS min_date, MAX(sale_date) AS max_date FROM fact_sales_daily"
+        )
+        row = rows[0] if rows else {}
+        min_date, max_date = row.get("min_date"), row.get("max_date")
         latest = str(max_date) if max_date else None
         return {
             "dataset_min_date": str(min_date) if min_date else None,

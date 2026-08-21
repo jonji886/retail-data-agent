@@ -85,12 +85,14 @@ Executable Success Rate = 100%（27/27，仅统计期望执行的用例）
 
 - 不调用 LLM，使用确定性 NLQ Engine 解析；
 - 全量 35 用例，可离线复现；
+- 强制使用本地 DuckDB，不受 `DATA_SOURCE` 环境变量影响；
 - 输出 `reports/evaluation_report.json`。
 
 ### LLM-enabled Evaluation（`run_llm_evaluation.py`）
 
-- 通过 OpenRouter 真实调用配置的模型构建 Query Plan；
-- 报告记录：`mode=llm`、`model`、`llm_calls`、`fallback_count`、`fallback_rate`；
+- 通过 OpenRouter 真实调用配置的固定模型构建 Query Plan；
+- 必须配置 `EVAL_LLM_MODEL` 具体模型，禁止使用 `openrouter/free`；
+- 报告记录：`provider`、`model`、`evaluation_timestamp`、`case_count`、`pass_count`、`pass_rate`、`llm_calls`、`fallback_count`、`fallback_rate`、`latency_ms`、token usage 和 `estimated_cost`；
 - 未配置 `OPENROUTER_API_KEY` 时**明确 SKIP 且不生成报告**，禁止输出"0 calls / 100% pass"的误导结果；
 - 输出 `reports/llm_evaluation_report.json`。
 

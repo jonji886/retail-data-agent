@@ -22,7 +22,7 @@ def anomaly_analysis_skill(plan: QueryPlan, context: Dict[str, Any]) -> Dict[str
     # 门店经理按门店粒度检测，区域/总部按区域粒度检测，均在 SQL 层限定权限范围。
     entity_level = "store" if store_id else "region"
 
-    detector = SalesAnomalyDetector(database_path)
+    detector = SalesAnomalyDetector(database_path, data_source=context.get("data_source"))
     try:
         anomalies = detector.detect(
             month,

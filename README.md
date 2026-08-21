@@ -3,17 +3,18 @@
 [![CI](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml)
 
 > 将自然语言经营问题，转换为**受治理、可审计、可评测**的数据分析执行流程的 Agent MVP。
-> 面向 FDE / Agent 交付岗位的作品集项目：不追求框架数量，追求**架构边界、权限安全、评测验证与交付一致性**。
 
 ```
 Status: MVP
-Version: v0.6.0
+Version: v1.0.0
 Last verified: 2026-08-21
 
 Golden cases: 35
 Evaluation cases: 35
 Demo scenarios: 4
 Web tabs: 6
+Unit test files: 18
+Unit tests: 107
 ```
 
 > 上表为项目状态单一事实来源，由 `python3 scripts/verify_project_consistency.py` 自动校验，防止文档与代码漂移。
@@ -147,7 +148,11 @@ single orchestrated graph（单一编排图）
 | Business semantics | Semantic Layer（`configs/metrics/metrics.json` 为单一口径来源） |
 | Tool governance | Skill + Tool 分层调用，按意图路由 |
 | Permission | RBAC（角色/用户）+ Data Scope（区域/门店数据权限） |
-| SQL safety | 应用层 SQL Guard + DuckDB external access lockdown + 只读连接 + 结果行数限制 |
+| SQL safety | 应用层 SQL Guard + DuckDB capability lockdown / PostgreSQL SELECT-only + 结果行数限制 |
+| Data source | `DataSourceBase` + DuckDB（本地/CI）+ PostgreSQL（Supabase/公网近似生产） |
+| LLM gateway | OpenRouter Provider、Demo 免费 Router、Evaluation 固定模型、有限重试与 fallback |
+| Cost / quota | Demo session/IP/global daily quota；超限前不发起 LLM 请求 |
+| API boundary | FastAPI `/api/v1/query`、`/health`、`/ready`，与 Streamlit 共享 Application Service |
 | Observability | Trace（逐节点事件）+ Audit（JSONL 审计日志） |
 | Quality | Golden Dataset（35 用例，9 类场景，见 `docs/evaluation.md`） |
 | Regression | 自动化评测（Deterministic + LLM 两种模式） |
@@ -177,18 +182,13 @@ single orchestrated graph（单一编排图）
 
 ### Real LLM E2E Evaluation
 
-> 现有报告是 2026-08-19 的历史 DeepSeek 运行结果（模型 `deepseek-v4-flash`）；当前代码已切换为 OpenRouter，需配置 `OPENROUTER_API_KEY` 后重新运行 `python3 scripts/run_llm_evaluation.py` 才能生成 OpenRouter 证据。也可手动触发 [GitHub Actions workflow](https://github.com/jonji886/retail-data-agent/actions/workflows/llm-evaluation.yml)。
+当前工作区未生成新的真实 LLM 报告。运行该评测必须同时配置 `OPENROUTER_API_KEY` 和固定的具体模型 `EVAL_LLM_MODEL`；禁止使用 `openrouter/free`，避免动态 Router 破坏可重复性。
 
-| Metric | Last verified value |
-| ------ | ------------------- |
-| Cases | 35 |
-| Passed / Overall Pass Rate | 34/35（97.1%） |
-| Executable Success | 26/27（96.3%） |
-| LLM Calls | 51 |
-| Fallback Count / Rate | 2 / 5.7% |
-| Total Duration | 198.7s |
+```bash
+python3 scripts/run_llm_evaluation.py
+```
 
-上表仅保留历史报告，不将历史 DeepSeek 数字冒充为当前 OpenRouter 结果；配置 OpenRouter Key 后需重新运行完整真实评测。相对时间 Badcase 已完成代码修复，待下一次完整真实评测复核。
+报告生成后会记录 provider、model、评测时间、case/pass、LLM calls、fallback、延迟、token 与 estimated cost；README 一致性校验会阻止报告数字与页面漂移。也可手动触发 [GitHub Actions workflow](https://github.com/jonji886/retail-data-agent/actions/workflows/llm-evaluation.yml)。
 
 ### Known / Resolved Badcases
 
@@ -249,16 +249,18 @@ python3 scripts/init_db.py
 
 # 3.（可选）配置 OpenRouter LLM：复制 .env.example 为 .env 并填写 API Key
 cp .env.example .env
-# 编辑 .env，至少填写：LLM_PROVIDER=openrouter、OPENROUTER_API_KEY=你的 OpenRouter API Key、OPENROUTER_MODEL=openrouter/free
+# Demo 至少填写：LLM_PROVIDER=openrouter、OPENROUTER_API_KEY=你的 OpenRouter API Key、OPENROUTER_MODEL=具体模型
+# 可选：OPENROUTER_BASE_URL、OPENROUTER_FALLBACK_MODELS（逗号分隔）
+# 示例：OPENROUTER_FALLBACK_MODELS=provider/model-a,provider/model-b
 
-# 4. 启动 Web Demo
+# 4. 启动 Web Demo（默认 DuckDB；公网部署可切换 PostgreSQL）
 streamlit run app/web_app.py
 ```
 
 ### 常用命令
 
 ```bash
-# 单元测试（17 个测试文件，96 个用例）
+# 单元测试（测试文件/用例数量由 consistency check 校验）
 python3 -m unittest discover -s tests
 
 # 确定性评测（生成 reports/evaluation_report.json）
@@ -273,6 +275,12 @@ python3 scripts/verify_project_consistency.py
 # 语义层与只读查询 Smoke Test
 python3 scripts/smoke_query.py
 
+# PostgreSQL / Supabase 初始化（DATA_SOURCE=postgresql + DATABASE_URL）
+python3 scripts/init_postgres.py
+
+# API Boundary
+uvicorn app.api:app --host 0.0.0.0 --port 8000
+
 # 与 GitHub Actions 相同的本地质量门禁（真实 LLM 不在其中）
 ruff check .
 python3 -m compileall app
@@ -283,7 +291,7 @@ docker compose up --build
 
 ## Render Free 部署
 
-当前 MVP 可以使用 Render Free Web Service 运行，不需要 Supabase。部署使用仓库内的 `Dockerfile` 和 `render.yaml`，应用启动时会生成固定种子的本地 DuckDB 数据。
+当前 v1.0 Demo 使用 Render + Supabase PostgreSQL + OpenRouter。部署使用仓库内的 `Dockerfile` 和 `render.yaml`；本地/CI 仍保留 DuckDB 作为可复现基线。
 
 当前公网 Demo：**[https://retail-data-agent.onrender.com](https://retail-data-agent.onrender.com)**
 
@@ -300,17 +308,20 @@ Health Check Path: /_stcore/health
 
 ### 在公网 Demo 启用 OpenRouter
 
-Render 已在 `render.yaml` 中声明 OpenRouter 配置，但 API Key 和模型 slug 必须在 Render 控制台手动填写，不能写入 Git：
+Render 已在 `render.yaml` 中声明 PostgreSQL、OpenRouter 和 Demo quota 配置，但数据库 URL、API Key 和模型 slug 必须在 Render 控制台手动填写，不能写入 Git：
 
 1. 打开 Render 的 `retail-data-agent` 服务，进入 **Settings → Environment**；
 2. 添加 `OPENROUTER_API_KEY`，值填写你的 OpenRouter API Key；
-3. 确认 `LLM_PROVIDER=openrouter`、`OPENROUTER_BASE_URL=https://openrouter.ai/api/v1`，并填写 `OPENROUTER_MODEL`（当前免费路由可填 `openrouter/free`）；
-4. 保存后点击 **Manual Deploy → Deploy latest commit**；
-5. 打开公网 Demo，在 **Agent** 或 **自然语言问数** Tab 选择 OpenRouter。页面显示“OpenRouter 已配置”后才会启用对应选项。
+3. 添加 `DATABASE_URL`，值填写 Supabase PostgreSQL 连接串；确认 `DATA_SOURCE=postgresql`；
+4. Demo 填写 `LLM_MODEL=openrouter/free`；只有真实评测才填写固定的 `EVAL_LLM_MODEL`；
+5. 保存后点击 **Manual Deploy → Deploy latest commit**；
+6. 打开公网 Demo，在 **Agent** 或 **自然语言问数** Tab 选择 OpenRouter。页面显示“OpenRouter 已配置”后才会启用对应选项。
 
 OpenRouter 模型调用费用由 OpenRouter 账户承担，不包含在 Render Free 中。模型只负责解析查询计划或组织文字，权限校验、指标口径、SQL 生成与执行仍由本地受控链路完成；调用失败时会回退到确定性结果。
 
-`openrouter/free` 是 OpenRouter 的免费路由，会在符合能力要求的免费模型中动态选择；免费模型的速率限制、响应速度和回答质量可能波动，适合 Demo 验证，不建议作为生产稳定性承诺。
+`OPENROUTER_FALLBACK_MODELS` 是可选的 OpenRouter 候选模型列表，使用逗号分隔，例如 `provider/model-a,provider/model-b`。主模型由 `OPENROUTER_MODEL`（或兼容配置 `LLM_MODEL`）指定；配置候选列表后，OpenRouter 可在主模型不可用时按顺序尝试候选模型。它与应用侧的 deterministic fallback 不同：前者仍属于模型调用，后者是在模型请求失败或输出不合规时直接使用确定性链路。`.env` 中只保留一行 `OPENROUTER_FALLBACK_MODELS`，不要重复配置。
+
+`openrouter/free` 是 OpenRouter 的免费路由，会动态选择免费模型；它只用于 Public Demo。Evaluation 必须固定具体模型。Demo 默认 session/IP/global quota 为 10/20/40，超限后不会继续调用 LLM。
 
 详细控制台配置、环境变量、验证步骤和免费版数据持久化限制见 [docs/deploy-render.md](docs/deploy-render.md)。Render Free 适合 Demo 和低流量验证；审计日志与 DuckDB 文件不保证跨重启持久化。
 
@@ -320,6 +331,10 @@ OpenRouter 模型调用费用由 OpenRouter 账户承担，不包含在 Render F
 app/
   agent/        # LangGraph Runtime：parse → policy → skill → validate → answer
   llm/          # LLM 客户端（OpenRouter），prompt 纳入版本控制
+  data_sources/ # DataSourceBase、DuckDB、PostgreSQL 与工厂
+  observability/# quota 与进程内 Operational Metrics
+  application.py# Streamlit / API 共享 Application Service
+  api.py        # FastAPI API Boundary
   quality/      # Evaluation 2.0 + Audit 审计
   skills/       # 归因 / 异常 / 报告 / 指标查询 Skill
   tools/        # 语义层、只读 SQL 执行、权限、元数据
@@ -333,8 +348,8 @@ configs/
   users.json    # RBAC 角色与数据权限
 scripts/        # 评测、一致性校验、Smoke Test、Ground Truth 生成
 reports/        # evaluation_report.json / llm_evaluation_report.json
-tests/          # 17 个测试文件，96 个用例
-docs/           # architecture / evaluation / demo-script / deploy-render
+tests/          # 18 个测试文件，107 个用例
+docs/           # architecture / evaluation / operations / decisions / deploy-render
 ```
 
 ---
@@ -343,10 +358,10 @@ docs/           # architecture / evaluation / demo-script / deploy-render
 
 本项目定位 **Enterprise-oriented MVP**，明确不做：
 
-- PostgreSQL / MySQL 等外部数据库（当前使用本地 DuckDB 虚拟数据）；
+- MySQL、ClickHouse 等未实现的数据源；
 - Multi-Agent、MCP、RAG、Vector DB、Kubernetes、微服务；
-- 复杂监控平台与可观测产品；
-- 生产级公网部署、高可用和持久化审计（当前仅提供 Render Free Demo 部署路径）。
+- Prometheus/Grafana 等复杂监控平台与分布式限流；
+- 高可用、持久化审计和强一致的公网配额系统；当前部署仍是 Portfolio MVP。
 
 当前归因结果表示数据变化贡献，不自动证明促销、库存、客流或其他业务因果；管理者仍需结合业务事实复核。老板视角的页面信息层级、图表和行动建议要求见 [docs/decision-support-ui.md](docs/decision-support-ui.md)。
 
@@ -359,6 +374,8 @@ docs/           # architecture / evaluation / demo-script / deploy-render
 - [SPEC.md](SPEC.md)：MVP Product Specification（问题、范围、验收标准）
 - [docs/architecture.md](docs/architecture.md)：架构与设计决策
 - [docs/evaluation.md](docs/evaluation.md)：评测目标、Golden Dataset、指标口径
+- [docs/operations.md](docs/operations.md)：故障检测、降级与运维检查
+- [docs/decisions/](docs/decisions/)：关键架构决策记录
 - [docs/demo-script.md](docs/demo-script.md)：面试演示脚本（5～10 分钟）
 - [docs/decision-support-ui.md](docs/decision-support-ui.md)：老板视角的经营决策视图设计目标
 - [docs/deploy-render.md](docs/deploy-render.md)：Render Free 部署说明与限制

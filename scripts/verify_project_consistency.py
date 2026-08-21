@@ -8,6 +8,7 @@
 4. Web Demo Tab 数量 == app/web_app.py 实际 Tab 数量
 5. LLM 报告不得出现 "0 LLM calls + 100% pass" 的误导组合
 6. README Evaluation 数字必须与 deterministic / LLM 报告一致
+7. README / SPEC version、verification date、测试文件数和测试用例数一致
 
 用法:
     python3 scripts/verify_project_consistency.py
@@ -30,9 +31,14 @@ GOLDEN_PATH = ROOT / "configs" / "evaluation" / "golden_questions.json"
 EVAL_REPORT_PATH = ROOT / "reports" / "evaluation_report.json"
 LLM_REPORT_PATH = ROOT / "reports" / "llm_evaluation_report.json"
 WEB_APP_PATH = ROOT / "app" / "web_app.py"
+SPEC_PATH = ROOT / "SPEC.md"
+TESTS_DIR = ROOT / "tests"
 
 # README Project Status 块中允许的键（单一事实来源）
-STATUS_KEYS = ("Golden cases", "Evaluation cases", "Demo scenarios", "Web tabs")
+STATUS_KEYS = (
+    "Version", "Last verified", "Golden cases", "Evaluation cases", "Demo scenarios",
+    "Web tabs", "Unit test files", "Unit tests",
+)
 
 
 def load_json(path: Path) -> Dict[str, Any]:
@@ -57,6 +63,25 @@ def golden_case_count() -> int:
     data = load_json(GOLDEN_PATH)
     cases = data.get("cases", data if isinstance(data, list) else [])
     return len(cases)
+
+
+def test_file_count() -> int:
+    return len(list(TESTS_DIR.glob("test_*.py")))
+
+
+def test_case_count() -> int:
+    return sum(
+        len(re.findall(r"^\s+def test_", path.read_text(encoding="utf-8"), re.MULTILINE))
+        for path in TESTS_DIR.glob("test_*.py")
+    )
+
+
+def spec_metadata() -> Dict[str, str]:
+    text = SPEC_PATH.read_text(encoding="utf-8")
+    return {
+        "Version": (re.search(r"^Version:\s*(\S+)", text, re.MULTILINE) or ["", ""])[1],
+        "Last verified": (re.search(r"^Last verified:\s*(\S+)", text, re.MULTILINE) or ["", ""])[1],
+    }
 
 
 def web_tab_count() -> int:
@@ -104,6 +129,31 @@ def main() -> int:
         errors.append("README Golden cases 漂移")
     else:
         print("  OK: README Golden cases 与 config 一致")
+
+    # 1b. README / SPEC 元信息与测试规模
+    spec = spec_metadata()
+    print("1b) Project metadata and tests:")
+    if status.get("Version") != spec.get("Version"):
+        print("  [FAIL] README Version=%s, SPEC Version=%s" % (status.get("Version"), spec.get("Version")))
+        errors.append("README/SPEC version 漂移")
+    if status.get("Last verified") != spec.get("Last verified"):
+        print("  [FAIL] README Last verified=%s, SPEC Last verified=%s" % (status.get("Last verified"), spec.get("Last verified")))
+        errors.append("README/SPEC verification date 漂移")
+    actual_test_files = test_file_count()
+    actual_tests = test_case_count()
+    if status.get("Unit test files") != str(actual_test_files):
+        print("  [FAIL] README Unit test files=%s, 实际=%s" % (status.get("Unit test files"), actual_test_files))
+        errors.append("README 测试文件数漂移")
+    if status.get("Unit tests") != str(actual_tests):
+        print("  [FAIL] README Unit tests=%s, 实际=%s" % (status.get("Unit tests"), actual_tests))
+        errors.append("README 测试用例数漂移")
+    if (
+        status.get("Version") == spec.get("Version")
+        and status.get("Last verified") == spec.get("Last verified")
+        and status.get("Unit test files") == str(actual_test_files)
+        and status.get("Unit tests") == str(actual_tests)
+    ):
+        print("  OK: version/date/test counts consistent")
 
     # 2. Evaluation Report
     print("2) Evaluation report:")
@@ -172,7 +222,14 @@ def main() -> int:
     # 5. LLM 报告可信度
     print("5) LLM evaluation report:")
     if not LLM_REPORT_PATH.exists():
-        print("  OK: 不存在（未配置 API Key 时符合预期，不做检查）")
+        llm_section = _readme_section(
+            "### Real LLM E2E Evaluation", "### Known / Resolved Badcases"
+        )
+        if "未生成" not in llm_section:
+            print("  [FAIL] LLM 报告不存在，但 README 未明确标记当前没有真实报告")
+            errors.append("README LLM 无报告说明缺失")
+        else:
+            print("  OK: 当前没有真实 LLM 报告，README 已明确说明")
     else:
         report = load_json(LLM_REPORT_PATH)
         mode = report.get("mode")

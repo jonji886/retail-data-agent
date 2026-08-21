@@ -9,8 +9,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.data_sources.base import DataSourceBase
-from app.tools.sql_runner import ReadOnlySQLRunner, open_readonly_connection
+from app.data_sources.base import DataSourceBase, DataSourceError, DataSourceTimeoutError
+from app.tools.sql_runner import ReadOnlySQLRunner, SQLSafetyError, open_readonly_connection
 
 
 class DuckDBDataSource(DataSourceBase):
@@ -20,9 +20,16 @@ class DuckDBDataSource(DataSourceBase):
         self.database_path = database_path
         self._runner = ReadOnlySQLRunner(database_path)
 
-    def execute_readonly(self, sql: str) -> List[Dict[str, Any]]:
+    def execute_readonly(self, sql: str, params=()) -> List[Dict[str, Any]]:
         """执行只读查询（经过 SQL 安全校验）。"""
-        return self._runner.query(sql)
+        try:
+            return self._runner.query(sql, list(params))
+        except (DataSourceError, SQLSafetyError):
+            raise
+        except TimeoutError as exc:
+            raise DataSourceTimeoutError("DuckDB 查询超时", "query_timeout") from exc
+        except Exception as exc:  # noqa: BLE001
+            raise DataSourceError("数据源查询失败", "query_execution_failed") from exc
 
     def get_metadata(self) -> Dict[str, Any]:
         """返回表列表与行数。"""
@@ -66,3 +73,7 @@ class DuckDBDataSource(DataSourceBase):
             return True
         except Exception:  # noqa: BLE001
             return False
+
+    @property
+    def dialect(self) -> str:
+        return "duckdb"

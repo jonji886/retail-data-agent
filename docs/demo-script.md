@@ -107,10 +107,10 @@ streamlit run app/web_app.py   # 打开 http://localhost:8501
 ## 常见问答准备
 
 **Q：这个项目的 SQL 是假的吗？**
-A：数据是固定种子的虚拟数据（DuckDB），但查询链路、权限、SQL 校验是真实代码。SQL 是只读 SELECT，由语义层生成。
+A：数据是固定种子的虚拟数据；本地/CI 使用 DuckDB，公网近生产路径使用 Supabase PostgreSQL。查询链路、权限、SQL 校验是真实代码，SQL 是只读 SELECT，由语义层生成。
 
 **Q：为什么不用 PostgreSQL？**
-A：MVP 阶段用本地 DuckDB 保持可复现性。语义层与工具接口与数据库解耦，外部数据库适配在 Non-goals 中明确标注为下一阶段，不冒充已实现。
+A：本地/CI 仍使用 DuckDB 保持可复现性；作品集部署路径已支持 Supabase PostgreSQL。两者通过 `DataSourceBase` 复用同一语义层、权限和只读查询边界，避免把本地评测与公网运行环境混在一起。
 
 **Q：LLM 评测是怎么做的？**
 A：`run_llm_evaluation.py` 通过 OpenRouter 真实调用 `.env` / Render 中配置的模型，并记录 model / llm_calls / fallback_rate。没有 `OPENROUTER_API_KEY` 时明确 SKIP，不生成假报告。

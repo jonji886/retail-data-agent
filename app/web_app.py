@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict
 
@@ -13,7 +14,8 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.agent.graph import run_agent
+from app.application import AgentApplicationService
+from app.data_sources.factory import create_data_source
 from app.agent.llm_nlq import OpenRouterNLQEngine
 from app.agent.nlq import NLQError, NaturalLanguageQueryEngine
 from app.llm.openrouter_client import DEFAULT_MODEL, OpenRouterConfig, load_env_file
@@ -34,12 +36,22 @@ st.set_page_config(page_title="优选生活 · Data Agent", page_icon="📊", la
 
 @st.cache_resource
 def deterministic_engine() -> NaturalLanguageQueryEngine:
-    return NaturalLanguageQueryEngine(ROOT)
+    return NaturalLanguageQueryEngine(ROOT, data_source=app_data_source())
+
+
+@st.cache_resource
+def app_data_source():
+    return create_data_source(ROOT)
+
+
+@st.cache_resource
+def agent_service() -> AgentApplicationService:
+    return AgentApplicationService(ROOT, data_source=app_data_source())
 
 
 @st.cache_resource
 def report_builder() -> RetailReportBuilder:
-    return RetailReportBuilder(ROOT)
+    return RetailReportBuilder(ROOT, data_source=app_data_source())
 
 
 def money(value: float) -> str:
@@ -60,7 +72,7 @@ def openrouter_status() -> tuple[bool, str]:
     """返回当前进程看到的 OpenRouter 配置状态，不暴露 API Key。"""
     configured = OpenRouterConfig.is_configured(ROOT)
     load_env_file(ROOT / ".env")
-    model = os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    model = os.getenv("LLM_MODEL", "").strip() or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
     return configured, model
 
 
@@ -121,7 +133,7 @@ def render_ask() -> None:
     if st.button("开始分析", type="primary"):
         try:
             if mode == openrouter_mode:
-                answer = OpenRouterNLQEngine(ROOT).answer(question)
+                answer = OpenRouterNLQEngine(ROOT, data_source=app_data_source()).answer(question)
             else:
                 answer = deterministic_engine().answer(question)
             audit_id = logger.record_query(question, mode, "success", answer.parsed, answer.sql, len(answer.rows))
@@ -162,7 +174,7 @@ def render_ask() -> None:
 
 def render_alerts(settings: Dict[str, str]) -> None:
     st.subheader("预警与归因")
-    detector = SalesAnomalyDetector(ROOT / "data" / "retail.duckdb")
+    detector = SalesAnomalyDetector(ROOT / "data" / "retail.duckdb", data_source=app_data_source())
     anomalies = detector.detect(settings["month"], entity_level="region", region_name=selected_region(settings))
     if anomalies:
         for item in anomalies:
@@ -172,7 +184,7 @@ def render_alerts(settings: Dict[str, str]) -> None:
     else:
         st.success("当前没有触发销售下降预警。")
 
-    result = SalesAttributor(ROOT / "data" / "retail.duckdb").analyze(
+    result = SalesAttributor(ROOT / "data" / "retail.duckdb", data_source=app_data_source()).analyze(
         settings["month"], settings["dimension"], None if settings["region"] == "全部区域" else settings["region"]
     )
     st.markdown("### 销售变化归因")
@@ -324,9 +336,14 @@ def render_agent() -> None:
     user_id, role, data_scope = user_options[user_label]
 
     if run_btn:
+        if "session_id" not in st.session_state:
+            st.session_state["session_id"] = "st_" + uuid.uuid4().hex[:12]
         with st.status("Agent 执行中…", expanded=True) as status:
             status.write("解析意图 → 权限检查 → 执行 Skill → 校验结果 → 生成回答 → 审计")
-            state = run_agent(question, ROOT, user_id=user_id, role=role, data_scope=data_scope, use_llm=use_llm)
+            state = agent_service().query(
+                question, user_id=user_id, role=role, data_scope=data_scope,
+                use_llm=use_llm, session_id=st.session_state.get("session_id", "streamlit"),
+            )
             st.session_state["agent_state"] = state
             status.update(label="Agent 执行完成", state="complete", expanded=False)
 

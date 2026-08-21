@@ -10,8 +10,9 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from app.analytics.anomaly import Anomaly, SalesAnomalyDetector
 from app.analytics.attribution import AttributionResult, SalesAttributor
+from app.data_sources.base import DataSourceBase
+from app.data_sources.factory import create_data_source
 from app.llm.openrouter_client import OpenRouterClient
-from app.tools.sql_runner import open_readonly_connection
 
 
 def _month_range(month: str) -> Tuple[date, date]:
@@ -74,9 +75,10 @@ class ReportContext:
 
 
 class RetailReportBuilder:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, data_source: Optional[DataSourceBase] = None) -> None:
         self.root = root
         self.database_path = root / "data" / "retail.duckdb"
+        self.data_source = data_source or create_data_source(root)
 
     def build_context(
         self,
@@ -93,10 +95,10 @@ class RetailReportBuilder:
         trend = self._load_trend(month, region_name, store_id)
         # 门店经理按门店粒度检测，区域/总部按区域粒度检测，均在 SQL 层限定权限范围。
         if store_id:
-            anomalies = SalesAnomalyDetector(self.database_path).detect(month, entity_level="store", store_id=store_id)
+            anomalies = SalesAnomalyDetector(self.database_path, data_source=self.data_source).detect(month, entity_level="store", store_id=store_id)
         else:
-            anomalies = SalesAnomalyDetector(self.database_path).detect(month, entity_level="region", region_name=region_name)
-        attribution = SalesAttributor(self.database_path).analyze(month, attribution_dimension, region_name, store_id)
+            anomalies = SalesAnomalyDetector(self.database_path, data_source=self.data_source).detect(month, entity_level="region", region_name=region_name)
+        attribution = SalesAttributor(self.database_path, data_source=self.data_source).analyze(month, attribution_dimension, region_name, store_id)
         return ReportContext(
             company="优选生活",
             report_type="经营分析月报",
@@ -131,8 +133,9 @@ class RetailReportBuilder:
         params.extend([previous_start.isoformat(), previous_end.isoformat()])
         params.extend(scope_params)
         query = (
-            "SELECT period, SUM(sales_amount), SUM(order_count), SUM(gross_profit), "
-            "SUM(sales_amount) / NULLIF(SUM(order_count), 0) "
+            "SELECT period, SUM(sales_amount) AS sales_amount, "
+            "SUM(order_count) AS order_count, SUM(gross_profit) AS gross_profit, "
+            "SUM(sales_amount) / NULLIF(SUM(order_count), 0) AS average_order_value "
             "FROM ("
             "SELECT 'current' AS period, sales_amount, order_count, gross_profit FROM v_sales_enriched "
             "WHERE sale_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)%s "
@@ -142,11 +145,7 @@ class RetailReportBuilder:
             ") GROUP BY 1 ORDER BY 1"
             % (scope_sql, scope_sql)
         )
-        connection = open_readonly_connection(self.database_path)
-        try:
-            rows = connection.execute(query, params).fetchall()
-        finally:
-            connection.close()
+        rows = [tuple(row.values()) for row in self.data_source.execute_readonly(query, params)]
         values: Dict[str, Tuple[float, float, float, float]] = {}
         for period, sales, orders, profit, average_order_value in rows:
             values[str(period)] = (float(sales or 0), float(orders or 0), float(profit or 0), float(average_order_value or 0))
@@ -179,17 +178,18 @@ class RetailReportBuilder:
             scope_params.append(store_id)
         scope_sql = (" AND " + " AND ".join(scope_clauses)) if scope_clauses else ""
         params: List[str] = [start.isoformat(), end.isoformat()] + scope_params
+        period_expression = (
+            "strftime(date_trunc('month', sale_date), '%%Y-%%m')"
+            if self.data_source.dialect == "duckdb"
+            else "to_char(date_trunc('month', sale_date), 'YYYY-MM')"
+        )
         query = (
-            "SELECT strftime(date_trunc('month', sale_date), '%%Y-%%m') AS period, "
+            "SELECT %s AS period, "
             "SUM(sales_amount) AS sales_amount, SUM(gross_profit) / NULLIF(SUM(sales_amount), 0) AS gross_margin_rate "
             "FROM v_sales_enriched WHERE sale_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)%s "
-            "GROUP BY 1 ORDER BY 1" % scope_sql
+            "GROUP BY 1 ORDER BY 1" % (period_expression, scope_sql)
         )
-        connection = open_readonly_connection(self.database_path)
-        try:
-            rows = connection.execute(query, params).fetchall()
-        finally:
-            connection.close()
+        rows = [tuple(row.values()) for row in self.data_source.execute_readonly(query, params)]
         return [
             {"period": str(period), "sales_amount": float(sales_amount or 0), "gross_margin_rate": float(margin or 0)}
             for period, sales_amount, margin in rows

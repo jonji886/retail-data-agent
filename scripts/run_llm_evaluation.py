@@ -4,7 +4,7 @@
 - mode=deterministic：由 scripts/run_evaluation.py 生成，不调用 LLM。
 - mode=llm：本脚本生成，真实调用 LLM 解析问题并构建 Query Plan。
 
-无 API Key 时明确 skip，并删除可能残留的旧报告，避免误导：
+无 API Key 或未配置固定评测模型时明确 skip，并删除可能残留的旧报告，避免误导：
 不要出现 "100% pass 但 0 LLM calls" 的无证据报告。
 
 报告至少包含：model / cases / passed / plan_accuracy / llm_calls /
@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.agent.graph import run_agent
+from app.data_sources.duckdb import DuckDBDataSource
 from app.llm.openrouter_client import OpenRouterConfig, load_env_file
 from app.quality.evaluation import _load_cases
 
@@ -127,20 +128,24 @@ def _delete_stale_report() -> None:
 
 def main() -> int:
     load_env_file(ROOT / ".env")
-    if not OpenRouterConfig.is_configured(ROOT):
+    if not OpenRouterConfig.is_configured(ROOT, mode="evaluation"):
         _delete_stale_report()
-        print("SKIP: 未配置 OPENROUTER_API_KEY，LLM E2E 评测跳过（不会生成报告）。")
+        print("SKIP: 未配置 OPENROUTER_API_KEY 或固定 EVAL_LLM_MODEL，LLM E2E 评测跳过（不会生成报告）。")
         print("确定性 baseline 评测请运行: python3 scripts/run_evaluation.py")
         return 0
 
-    model = OpenRouterConfig.from_env(ROOT).model
+    config = OpenRouterConfig.from_env(ROOT, mode="evaluation")
+    model = config.model
     cases = _load_cases(ROOT)
     print("Running LLM E2E evaluation on %d cases (model=%s)..." % (len(cases), model))
 
     results: List[Dict[str, Any]] = []
+    evaluation_source = DuckDBDataSource(ROOT / "data" / "retail.duckdb")
     total_llm_calls = 0
     total_fallbacks = 0
     total_latency = 0.0
+    input_tokens = 0
+    output_tokens = 0
     plan_correct = 0
     executable_cases = 0
     exec_success = 0
@@ -153,7 +158,7 @@ def main() -> int:
             user_id=case.get("user_id", "user_hq"),
             role=case.get("role", "hq_manager"),
             data_scope=case.get("data_scope", {"scope": "all"}),
-            use_llm=True,
+            use_llm=True, data_source=evaluation_source,
         )
         latency = time.monotonic() - start
         total_latency += latency
@@ -163,6 +168,9 @@ def main() -> int:
         fallback = _count_fallbacks(entries)
         total_llm_calls += llm_calls
         total_fallbacks += fallback
+        for entry in entries:
+            input_tokens += int(entry.get("input_tokens") or 0)
+            output_tokens += int(entry.get("output_tokens") or 0)
 
         intent_ok = state.get("intent") == case.get("intent")
         if case.get("baseline_only") or case.get("intent") == "trend_analysis":
@@ -211,22 +219,33 @@ def main() -> int:
 
     report: Dict[str, Any] = {
         "mode": "llm",
+        "provider": config.provider,
         "model": model,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "evaluation_timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "note": "LLM-enabled evaluation：真实调用 LLM 构建 Query Plan；"
                 "相对时间窗口由 deterministic relative-time policy 统一归一化。",
         "total": len(results), "passed": passed,
+        "case_count": len(results), "pass_count": passed,
+        "pass_rate": passed / len(results) if results else 0,
         "overall_pass_rate": passed / len(results) if results else 0,
         "plan_accuracy": plan_correct / len(results) if results else 0,
         "executable_cases": executable_cases,
         "non_executable_cases": len(results) - executable_cases,
         "executable_success_rate": exec_success / executable_cases if executable_cases else None,
         "total_llm_calls": total_llm_calls,
+        "llm_calls": total_llm_calls,
         "fallback_count": total_fallbacks,
         "fallback_rate": fallback_rate,
         "total_latency_s": total_latency,
+        "latency_ms": int(total_latency * 1000),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+        "estimated_cost": None,
         "results": results,
     }
+    evaluation_source.close()
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print("Report written to: %s" % REPORT_PATH)
