@@ -41,7 +41,7 @@ Last verified: 2026-08-20
 
 - 有状态编排图：`parse_request → policy_check → execute_skill → validate_result → generate_answer`，含 unsupported / denied / error 分支。
 - 查询计划（Query Plan）：intent / metric / dimensions / filters / time range / comparison 的结构化中间产物。
-- 双链路解析：确定性基线（NLQ Engine）+ LLM 增强（DeepSeek，需 API Key），LLM 不可用时自动回退且记录 fallback。
+- 双链路解析：确定性基线（NLQ Engine）+ OpenRouter LLM 增强（需 API Key），LLM 不可用时自动回退且记录 fallback。
 
 ### 4.2 语义层与工具
 
@@ -122,7 +122,7 @@ Last verified: 2026-08-20
 2. `Golden Dataset 数量（35）== README 描述 == 评测报告 total`；
 3. `Web Demo Tab 数量（6）== README 描述 == web_app.py 实际`；
 4. `Overall Pass Rate` 与 `Executable Success Rate` 口径可解释、不冲突；
-5. 全部单元测试通过（当前 17 文件 / 93 用例）；
+5. 全部单元测试通过（当前 17 文件 / 96 用例）；
 6. 任何指标或能力声明都能在代码 / 测试 / 报告中找到证据。
 
 ## 9. Future（Out of Scope，未实现不宣传）

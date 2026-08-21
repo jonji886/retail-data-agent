@@ -1,4 +1,4 @@
-"""使用 DeepSeek 解析自然语言，再交给确定性语义层执行。"""
+"""使用 OpenRouter 解析自然语言，再交给确定性语义层执行。"""
 
 from __future__ import annotations
 
@@ -10,24 +10,28 @@ from typing import Any, Dict, Mapping
 
 from app.agent.nlq import DateRange, NLQError, NaturalLanguageQueryEngine, ParsedQuestion
 from app.domain.time_range import resolve_relative_time
-from app.llm.deepseek_client import DeepSeekClient, DeepSeekConfig
+from app.llm.openrouter_client import OpenRouterClient, OpenRouterConfig
 
 
 class LLMPlanError(NLQError):
     """大模型计划格式或内容不符合语义层约束。"""
 
 
-class DeepSeekNLQEngine:
+class OpenRouterNLQEngine:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.deterministic = NaturalLanguageQueryEngine(root)
-        self.config = DeepSeekConfig.from_env(root)
-        self.client = DeepSeekClient(self.config)
+        self.config = OpenRouterConfig.from_env(root)
+        self.client = OpenRouterClient(self.config)
 
-    def answer(self, question: str):
+    def parse(self, question: str) -> ParsedQuestion:
+        """调用 OpenRouter 生成计划，再通过本地规则完成严格校验。"""
         plan_json = self.client.complete_json(self._system_prompt(), question)
         plan = self._parse_json(plan_json)
-        parsed = self._build_parsed_question(question, plan)
+        return self._build_parsed_question(question, plan)
+
+    def answer(self, question: str):
+        parsed = self.parse(question)
         return self.deterministic.answer_parsed(parsed, question)
 
     def _system_prompt(self) -> str:

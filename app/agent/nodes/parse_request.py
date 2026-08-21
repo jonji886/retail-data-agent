@@ -1,6 +1,6 @@
 """parse_request 节点：Question → Intent → QueryPlan。
 
-优先复用现有 NaturalLanguageQueryEngine / DeepSeekNLQEngine。
+优先复用现有 NaturalLanguageQueryEngine / OpenRouterNLQEngine。
 LLM 不可用时保持 deterministic baseline 可独立运行。
 增加 intent 识别（现有引擎只识别 metric_query，需扩展到 attribution/anomaly/report）。
 """
@@ -118,29 +118,23 @@ def parse_request(state: AgentState) -> AgentState:
     if intent in (Intent.METRIC_QUERY, Intent.TREND_ANALYSIS):
         try:
             if use_llm:
-                from app.agent.llm_nlq import DeepSeekNLQEngine, LLMPlanError
+                from app.agent.llm_nlq import OpenRouterNLQEngine
                 try:
-                    llm_engine = DeepSeekNLQEngine(root)
-                    parsed = llm_engine.parse(question) if hasattr(llm_engine, "parse") else None
-                    # DeepSeekNLQEngine 没有 parse 方法，用 answer 的内部逻辑
-                    # 直接构造 plan
-                    plan_json_str = llm_engine.client.complete_json(
-                        llm_engine._system_prompt(), question
-                    )
-                    plan_dict = llm_engine._parse_json(plan_json_str)
-                    parsed = llm_engine._build_parsed_question(question, plan_dict)
+                    llm_engine = OpenRouterNLQEngine(root)
+                    parsed = llm_engine.parse(question)
                     llm_calls = list(state.get("llm_calls", []))
                     llm_calls.append({
-                        "provider": "deepseek", "node": "parse_request",
-                        "status": "success", "prompt_version": "v1",
+                        "provider": "openrouter", "node": "parse_request",
+                        "status": "success", "model": llm_engine.config.model,
+                        "prompt_version": "v1",
                     })
                     state = {**state, "llm_calls": llm_calls}  # type: ignore[assignment]
-                except (RuntimeError, LLMPlanError) as exc:
+                except Exception as exc:  # noqa: BLE001
                     # LLM 不可用，回退到确定性
                     parsed = engine.parse(question)
                     llm_calls = list(state.get("llm_calls", []))
                     llm_calls.append({
-                        "provider": "deepseek", "node": "parse_request",
+                        "provider": "openrouter", "node": "parse_request",
                         "status": "fallback", "error": str(exc),
                     })
                     state = {**state, "llm_calls": llm_calls}  # type: ignore[assignment]

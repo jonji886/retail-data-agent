@@ -11,5 +11,19 @@ services:
         value: "8501"
       - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
         value: "false"
-      - key: DEEPSEEK_API_KEY
+      - key: LLM_PROVIDER
+        value: openrouter
+      - key: OPENROUTER_API_KEY
         sync: false
+      - key: OPENROUTER_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: OPENROUTER_MODEL
+        sync: false
+      - key: OPENROUTER_TIMEOUT_SECONDS
+        value: "60"
+      - key: OPENROUTER_MAX_TOKENS
+        value: "1200"
+      - key: OPENROUTER_HTTP_REFERER
+        value: https://retail-data-agent.onrender.com
+      - key: OPENROUTER_APP_TITLE
+        value: Retail Data Agent

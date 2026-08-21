@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -13,8 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.agent.graph import run_agent
-from app.agent.llm_nlq import DeepSeekNLQEngine
+from app.agent.llm_nlq import OpenRouterNLQEngine
 from app.agent.nlq import NLQError, NaturalLanguageQueryEngine
+from app.llm.openrouter_client import DEFAULT_MODEL, OpenRouterConfig, load_env_file
 from app.analytics.anomaly import SalesAnomalyDetector
 from app.analytics.attribution import SalesAttributor
 from app.quality.audit import AuditLogger
@@ -52,6 +54,14 @@ def percent(value: Any) -> str:
 
 def selected_region(settings: Dict[str, str]):
     return None if settings["region"] == "全部区域" else settings["region"]
+
+
+def openrouter_status() -> tuple[bool, str]:
+    """返回当前进程看到的 OpenRouter 配置状态，不暴露 API Key。"""
+    configured = OpenRouterConfig.is_configured(ROOT)
+    load_env_file(ROOT / ".env")
+    model = os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    return configured, model
 
 
 def render_sidebar() -> Dict[str, str]:
@@ -99,12 +109,19 @@ def render_ask() -> None:
         "上个月按渠道统计订单数",
     ]
     question = st.text_input("请输入经营问题", value=examples[0])
-    mode = st.radio("解析模式", ["确定性基线", "DeepSeek-V4-Flash"], horizontal=True)
+    llm_ready, model = openrouter_status()
+    if llm_ready:
+        st.caption("OpenRouter 已配置（模型：%s），调用结果仍会经过本地语义层、权限和只读 SQL 校验。" % model)
+    else:
+        st.info("当前未配置 OpenRouter API Key，仅提供确定性基线。Render 部署请在 Environment 中添加 OPENROUTER_API_KEY 后重新部署。")
+    openrouter_mode = "OpenRouter（%s）" % model
+    modes = ["确定性基线"] + ([openrouter_mode] if llm_ready else [])
+    mode = st.radio("解析模式", modes, horizontal=True)
     logger = AuditLogger(ROOT)
     if st.button("开始分析", type="primary"):
         try:
-            if mode == "DeepSeek-V4-Flash":
-                answer = DeepSeekNLQEngine(ROOT).answer(question)
+            if mode == openrouter_mode:
+                answer = OpenRouterNLQEngine(ROOT).answer(question)
             else:
                 answer = deterministic_engine().answer(question)
             audit_id = logger.record_query(question, mode, "success", answer.parsed, answer.sql, len(answer.rows))
@@ -169,9 +186,14 @@ def render_alerts(settings: Dict[str, str]) -> None:
 
 def render_report(settings: Dict[str, str]) -> None:
     st.subheader("智能经营报告")
-    use_llm = st.checkbox("使用 DeepSeek 生成报告文字", value=False)
+    llm_ready, model = openrouter_status()
+    use_llm = st.checkbox("使用 OpenRouter 生成报告文字", value=llm_ready, disabled=not llm_ready)
+    if llm_ready:
+        st.caption("已连接 OpenRouter（模型：%s）。报告中的 KPI、趋势和归因数字仍由本地逻辑生成。" % model)
+    else:
+        st.info("未配置 OPENROUTER_API_KEY，当前只能生成确定性报告。")
     if use_llm:
-        st.info("报告会先汇总本地数据，再调用 DeepSeek 组织文字，通常需要 10～60 秒；请保持页面打开。")
+        st.info("报告会先汇总本地数据，再调用 OpenRouter 组织文字，通常需要 10～60 秒；请保持页面打开。")
     else:
         st.caption("确定性报告只使用本地数据，通常几秒内完成。")
     if st.button("生成报告", type="primary"):
@@ -181,9 +203,9 @@ def render_report(settings: Dict[str, str]) -> None:
                 status.write("1/2 正在汇总 KPI、趋势、预警和归因数据…")
                 context = report_builder().build_context(settings["month"], selected_region(settings), settings["dimension"])
                 if use_llm:
-                    status.write("2/2 正在调用 DeepSeek 组织报告文字…")
-                    from app.llm.deepseek_client import DeepSeekClient, DeepSeekConfig
-                    report = RetailReportBuilder.to_deepseek_markdown(context, DeepSeekClient(DeepSeekConfig.from_env(ROOT)))
+                    status.write("2/2 正在调用 OpenRouter 组织报告文字…")
+                    from app.llm.openrouter_client import OpenRouterClient, OpenRouterConfig
+                    report = RetailReportBuilder.to_openrouter_markdown(context, OpenRouterClient(OpenRouterConfig.from_env(ROOT)))
                 else:
                     status.write("2/2 正在生成确定性 Markdown 报告…")
                     report = RetailReportBuilder.to_markdown(context)
@@ -192,7 +214,7 @@ def render_report(settings: Dict[str, str]) -> None:
                 status.update(label="报告生成完成（%.1f 秒）" % elapsed, state="complete", expanded=False)
         except Exception as exc:
             elapsed = time.monotonic() - started_at
-            st.error("报告生成失败（耗时 %.1f 秒）。请检查网络、DeepSeek API Key 或稍后重试。错误类型：%s" % (elapsed, type(exc).__name__))
+            st.error("报告生成失败（耗时 %.1f 秒）。请检查网络、OpenRouter API Key 或稍后重试。错误类型：%s" % (elapsed, type(exc).__name__))
     if st.session_state.get("report"):
         st.download_button("下载 Markdown", st.session_state["report"], file_name="%s-%s.md" % (settings["month"], settings["region"]))
         st.markdown(st.session_state["report"])
@@ -292,7 +314,12 @@ def render_agent() -> None:
         "门店经理 (user_store_01)": ("user_store_01", "store_manager", {"scope": "store", "store_id": "S001", "store_name": "上海旗舰店1店"}),
     }
     user_label = cols[0].selectbox("当前用户（权限）", list(user_options.keys()))
-    use_llm = cols[1].checkbox("使用 LLM（DeepSeek）", value=False)
+    llm_ready, model = openrouter_status()
+    use_llm = cols[1].checkbox("使用 LLM（OpenRouter）", value=llm_ready, disabled=not llm_ready)
+    if llm_ready:
+        st.caption("OpenRouter 已配置（模型：%s）；模型只负责计划/文字，权限、SQL 和指标计算仍由本地逻辑负责。" % model)
+    else:
+        st.info("未配置 OPENROUTER_API_KEY，Agent 将使用确定性基线。请在 Render Environment 添加 Key 后重新部署。")
     run_btn = cols[2].button("执行 Agent", type="primary")
     user_id, role, data_scope = user_options[user_label]
 
@@ -344,6 +371,15 @@ def render_agent() -> None:
                 steps.append(("Answer", "generated", "✓"))
             for label, value, mark in steps:
                 st.write("%s **%s**：`%s`" % (mark, label, value))
+
+            llm_calls = state.get("llm_calls", [])
+            if llm_calls:
+                success_calls = [item for item in llm_calls if item.get("status") == "success"]
+                fallback_calls = [item for item in llm_calls if item.get("status") == "fallback"]
+                if success_calls:
+                    st.success("OpenRouter 已调用 %d 次。" % len(success_calls))
+                if fallback_calls:
+                    st.warning("OpenRouter 未完成调用，已回退到确定性结果；不会影响权限和 SQL 安全校验。")
 
             trace_events = state.get("trace_events", [])
             if trace_events:

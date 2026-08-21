@@ -32,45 +32,57 @@ def generate_answer(state: AgentState) -> AgentState:
     llm_calls = list(state.get("llm_calls", []))
 
     # 可选 LLM 润色：仅基于已提供的事实，不添加新数字
-    if use_llm and _llm_available(root):
-        try:
-            llm_answer = _llm_summarize(root, intent, result, question, template_answer)
-            if llm_answer:
-                answer = llm_answer
-                llm_calls.append({
-                    "provider": "deepseek", "node": "generate_answer",
-                    "status": "success", "prompt_version": "v1",
-                })
-        except Exception as exc:  # noqa: BLE001
+    if use_llm:
+        if not _llm_available(root):
             llm_calls.append({
-                "provider": "deepseek", "node": "generate_answer",
-                "status": "fallback", "error": str(exc),
+                "provider": "openrouter", "node": "generate_answer",
+                "status": "fallback", "error": "OPENROUTER_API_KEY 未配置",
             })
-            # LLM 失败时使用模板回答
+        else:
+            try:
+                llm_answer = _llm_summarize(root, intent, result, question, template_answer)
+                if llm_answer:
+                    answer = llm_answer
+                    llm_calls.append({
+                        "provider": "openrouter", "node": "generate_answer",
+                        "status": "success", "model": _configured_model(root),
+                        "prompt_version": "v1",
+                    })
+            except Exception as exc:  # noqa: BLE001
+                llm_calls.append({
+                    "provider": "openrouter", "node": "generate_answer",
+                    "status": "fallback", "error": str(exc),
+                })
+                # LLM 失败时使用模板回答
 
     events.append({
         "trace_id": trace_id, "node": "generate_answer",
         "start_at": started, "end_at": time.monotonic(),
         "latency_ms": int((time.monotonic() - started) * 1000),
-        "status": "success", "used_llm": use_llm and len(llm_calls) > 0,
+        "status": "success", "used_llm": any(item.get("status") == "success" for item in llm_calls),
     })
 
     return {**state, "answer": answer, "trace_events": events, "llm_calls": llm_calls}
 
 
 def _llm_available(root: Path) -> bool:
+    from app.llm.openrouter_client import OpenRouterConfig
+    return OpenRouterConfig.is_configured(root)
+
+
+def _configured_model(root: Path) -> str:
+    from app.llm.openrouter_client import DEFAULT_MODEL, load_env_file
     import os
-    from app.llm.deepseek_client import load_env_file
     load_env_file(root / ".env")
-    return bool(os.getenv("DEEPSEEK_API_KEY", "").strip())
+    return os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
 
 
 def _llm_summarize(root: Path, intent: str, result: Dict[str, Any],
                    question: str, template: str) -> str:
-    """使用 DeepSeek 基于已提供的事实生成总结。"""
-    from app.llm.deepseek_client import DeepSeekClient, DeepSeekConfig
+    """使用 OpenRouter 基于已提供的事实生成总结。"""
+    from app.llm.openrouter_client import OpenRouterClient, OpenRouterConfig
     import json
-    client = DeepSeekClient(DeepSeekConfig.from_env(root))
+    client = OpenRouterClient(OpenRouterConfig.from_env(root))
     system_prompt = (
         "你是零售经营分析 Data Agent 的回答生成器。\n"
         "只能基于用户提供的已验证 JSON 事实生成中文总结，"

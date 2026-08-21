@@ -113,4 +113,4 @@ A：数据是固定种子的虚拟数据（DuckDB），但查询链路、权限�
 A：MVP 阶段用本地 DuckDB 保持可复现性。语义层与工具接口与数据库解耦，外部数据库适配在 Non-goals 中明确标注为下一阶段，不冒充已实现。
 
 **Q：LLM 评测是怎么做的？**
-A：`run_llm_evaluation.py` 真实调用 DeepSeek 并记录 model / llm_calls / fallback_rate。没有 API Key 时明确 SKIP，不生成假报告。
+A：`run_llm_evaluation.py` 通过 OpenRouter 真实调用 `.env` / Render 中配置的模型，并记录 model / llm_calls / fallback_rate。没有 `OPENROUTER_API_KEY` 时明确 SKIP，不生成假报告。

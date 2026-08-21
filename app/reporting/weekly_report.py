@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from app.analytics.anomaly import Anomaly, SalesAnomalyDetector
 from app.analytics.attribution import AttributionResult, SalesAttributor
-from app.llm.deepseek_client import DeepSeekClient
+from app.llm.openrouter_client import OpenRouterClient
 from app.tools.sql_runner import open_readonly_connection
 
 
@@ -240,7 +240,7 @@ class RetailReportBuilder:
         return "\n".join(lines)
 
     @staticmethod
-    def to_deepseek_markdown(context: ReportContext, client: DeepSeekClient) -> str:
+    def to_openrouter_markdown(context: ReportContext, client: OpenRouterClient) -> str:
         system_prompt = (
             "你是企业经营分析报告撰写助手。根据用户提供的已验证 JSON 数据生成中文 Markdown 月报。\n"
             "只使用输入中的数字和事实，不得改写、补充或猜测任何数据。\n"

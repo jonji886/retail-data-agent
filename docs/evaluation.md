@@ -89,9 +89,9 @@ Executable Success Rate = 100%（27/27，仅统计期望执行的用例）
 
 ### LLM-enabled Evaluation（`run_llm_evaluation.py`）
 
-- 真实调用 LLM 构建 Query Plan（DeepSeek）；
+- 通过 OpenRouter 真实调用配置的模型构建 Query Plan；
 - 报告记录：`mode=llm`、`model`、`llm_calls`、`fallback_count`、`fallback_rate`；
-- 未配置 `DEEPSEEK_API_KEY` 时**明确 SKIP 且不生成报告**，禁止输出"0 calls / 100% pass"的误导结果；
+- 未配置 `OPENROUTER_API_KEY` 时**明确 SKIP 且不生成报告**，禁止输出"0 calls / 100% pass"的误导结果；
 - 输出 `reports/llm_evaluation_report.json`。
 
 两条链路不混合：Deterministic Regression 是 GitHub Actions 的阻断门禁；Real

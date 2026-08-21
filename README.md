@@ -177,7 +177,7 @@ single orchestrated graph（单一编排图）
 
 ### Real LLM E2E Evaluation
 
-> 来源：`reports/llm_evaluation_report.json`，最近一次真实运行时间 `2026-08-19`，模型 `deepseek-v4-flash`。命令：`python3 scripts/run_llm_evaluation.py`；需配置 `DEEPSEEK_API_KEY`，也可手动触发 [GitHub Actions workflow](https://github.com/jonji886/retail-data-agent/actions/workflows/llm-evaluation.yml)。
+> 现有报告是 2026-08-19 的历史 DeepSeek 运行结果（模型 `deepseek-v4-flash`）；当前代码已切换为 OpenRouter，需配置 `OPENROUTER_API_KEY` 后重新运行 `python3 scripts/run_llm_evaluation.py` 才能生成 OpenRouter 证据。也可手动触发 [GitHub Actions workflow](https://github.com/jonji886/retail-data-agent/actions/workflows/llm-evaluation.yml)。
 
 | Metric | Last verified value |
 | ------ | ------------------- |
@@ -188,7 +188,7 @@ single orchestrated graph（单一编排图）
 | Fallback Count / Rate | 2 / 5.7% |
 | Total Duration | 198.7s |
 
-当前环境未配置 API Key，因此本轮没有伪造新的真实 LLM 数字；上表保留最近一次真实报告。相对时间 Badcase 已完成代码修复，待下一次完整真实评测复核。
+上表仅保留历史报告，不将历史 DeepSeek 数字冒充为当前 OpenRouter 结果；配置 OpenRouter Key 后需重新运行完整真实评测。相对时间 Badcase 已完成代码修复，待下一次完整真实评测复核。
 
 ### Known / Resolved Badcases
 
@@ -247,8 +247,9 @@ pip install -r requirements.txt
 python3 scripts/generate_data.py
 python3 scripts/init_db.py
 
-# 3.（可选）配置 LLM：复制 .env.example 为 .env 并填写 DEEPSEEK_API_KEY
+# 3.（可选）配置 OpenRouter LLM：复制 .env.example 为 .env 并填写 API Key
 cp .env.example .env
+# 编辑 .env，至少填写：LLM_PROVIDER=openrouter、OPENROUTER_API_KEY=你的 OpenRouter API Key、OPENROUTER_MODEL=openrouter/free
 
 # 4. 启动 Web Demo
 streamlit run app/web_app.py
@@ -257,13 +258,13 @@ streamlit run app/web_app.py
 ### 常用命令
 
 ```bash
-# 单元测试（17 个测试文件，93 个用例）
+# 单元测试（17 个测试文件，96 个用例）
 python3 -m unittest discover -s tests
 
 # 确定性评测（生成 reports/evaluation_report.json）
 python3 scripts/run_evaluation.py
 
-# LLM 增强评测（需要 DEEPSEEK_API_KEY）
+# LLM 增强评测（需要 OPENROUTER_API_KEY，会产生 OpenRouter 模型调用费用）
 python3 scripts/run_llm_evaluation.py
 
 # 项目一致性校验（README / 配置 / 报告 / Web Tabs）
@@ -284,6 +285,10 @@ docker compose up --build
 
 当前 MVP 可以使用 Render Free Web Service 运行，不需要 Supabase。部署使用仓库内的 `Dockerfile` 和 `render.yaml`，应用启动时会生成固定种子的本地 DuckDB 数据。
 
+当前公网 Demo：**[https://retail-data-agent.onrender.com](https://retail-data-agent.onrender.com)**
+
+该地址用于演示和低流量验证。Render Free 实例空闲后会休眠，首次访问可能需要等待几十秒；服务重启后本地 DuckDB 数据和审计日志不保证持久化。
+
 最小配置如下：
 
 ```text
@@ -293,6 +298,20 @@ PORT: 8501
 Health Check Path: /_stcore/health
 ```
 
+### 在公网 Demo 启用 OpenRouter
+
+Render 已在 `render.yaml` 中声明 OpenRouter 配置，但 API Key 和模型 slug 必须在 Render 控制台手动填写，不能写入 Git：
+
+1. 打开 Render 的 `retail-data-agent` 服务，进入 **Settings → Environment**；
+2. 添加 `OPENROUTER_API_KEY`，值填写你的 OpenRouter API Key；
+3. 确认 `LLM_PROVIDER=openrouter`、`OPENROUTER_BASE_URL=https://openrouter.ai/api/v1`，并填写 `OPENROUTER_MODEL`（当前免费路由可填 `openrouter/free`）；
+4. 保存后点击 **Manual Deploy → Deploy latest commit**；
+5. 打开公网 Demo，在 **Agent** 或 **自然语言问数** Tab 选择 OpenRouter。页面显示“OpenRouter 已配置”后才会启用对应选项。
+
+OpenRouter 模型调用费用由 OpenRouter 账户承担，不包含在 Render Free 中。模型只负责解析查询计划或组织文字，权限校验、指标口径、SQL 生成与执行仍由本地受控链路完成；调用失败时会回退到确定性结果。
+
+`openrouter/free` 是 OpenRouter 的免费路由，会在符合能力要求的免费模型中动态选择；免费模型的速率限制、响应速度和回答质量可能波动，适合 Demo 验证，不建议作为生产稳定性承诺。
+
 详细控制台配置、环境变量、验证步骤和免费版数据持久化限制见 [docs/deploy-render.md](docs/deploy-render.md)。Render Free 适合 Demo 和低流量验证；审计日志与 DuckDB 文件不保证跨重启持久化。
 
 ### 项目结构
@@ -300,7 +319,7 @@ Health Check Path: /_stcore/health
 ```text
 app/
   agent/        # LangGraph Runtime：parse → policy → skill → validate → answer
-  llm/          # LLM 客户端（DeepSeek），prompt 纳入版本控制
+  llm/          # LLM 客户端（OpenRouter），prompt 纳入版本控制
   quality/      # Evaluation 2.0 + Audit 审计
   skills/       # 归因 / 异常 / 报告 / 指标查询 Skill
   tools/        # 语义层、只读 SQL 执行、权限、元数据
@@ -314,7 +333,7 @@ configs/
   users.json    # RBAC 角色与数据权限
 scripts/        # 评测、一致性校验、Smoke Test、Ground Truth 生成
 reports/        # evaluation_report.json / llm_evaluation_report.json
-tests/          # 17 个测试文件，93 个用例
+tests/          # 17 个测试文件，96 个用例
 docs/           # architecture / evaluation / demo-script / deploy-render
 ```
 

@@ -67,13 +67,22 @@ STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
 仓库根目录的 `render.yaml` 已包含上述配置。可以在 Render 选择 Blueprint / Infrastructure as Code，从该文件创建服务；也可以按表格在控制台手动创建。
 
-如果需要启用 DeepSeek，在 Render 的 Environment 中增加：
+如果需要启用 OpenRouter，在 Render 的 Environment 中增加：
 
 ```text
-DEEPSEEK_API_KEY=<your-api-key>
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=<your-api-key>
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_MODEL=<your-model-slug>
+OPENROUTER_TIMEOUT_SECONDS=60
+OPENROUTER_MAX_TOKENS=1200
+OPENROUTER_HTTP_REFERER=https://retail-data-agent.onrender.com
+OPENROUTER_APP_TITLE=Retail Data Agent
 ```
 
-`DEEPSEEK_API_KEY` 不应写入仓库。不开启 LLM 时，确定性基线仍可运行。
+只有 `OPENROUTER_API_KEY` 是敏感配置，不能写入仓库；`OPENROUTER_MODEL` 使用 OpenRouter 的模型 slug。当前本地示例使用 `openrouter/free`，它会动态选择免费模型，速率限制、延迟和回答质量可能波动；如果需要稳定模型，应改为 OpenRouter 支持的具体模型 slug。其余变量是非敏感运行参数。保存环境变量后需要执行一次 **Manual Deploy → Deploy latest commit**，新进程才会读取配置。页面中看到“OpenRouter 已配置”后，在 Agent / 自然语言问数 / 智能报告中选择 OpenRouter 即可发起调用。
+
+OpenRouter 的模型调用费用由 OpenRouter 账户承担，Render Free 不包含模型调用额度。LLM 只生成结构化查询计划或文字表达，权限、指标口径、SQL 和计算仍由本地链路负责；请求失败时应用会回退到确定性结果，并在 Agent 的技术详情中标记 fallback。
 
 ## 4. 部署后验证
 
@@ -85,7 +94,7 @@ DEEPSEEK_API_KEY=<your-api-key>
 4. 在“质量评测”Tab 查看确定性评测结果；
 5. 观察 Deploy Logs 是否出现 DuckDB 初始化和 Streamlit 启动日志。
 
-建议首次部署时先关闭 LLM，确认容器、端口、DuckDB 和权限链路正常后，再配置 DeepSeek API Key。
+建议首次部署时先关闭 LLM，确认容器、端口、DuckDB 和权限链路正常后，再配置 OpenRouter API Key。
 
 ## 5. 常见问题
 
@@ -97,9 +106,9 @@ DEEPSEEK_API_KEY=<your-api-key>
 
 这是 Render Free 临时文件系统的预期行为，不是应用查询链路错误。需要长期保存时，应把审计写入外部数据库或对象存储；这属于后续架构改造。
 
-### DeepSeek 模式失败
+### OpenRouter 模式失败
 
-检查 `DEEPSEEK_API_KEY` 是否配置，以及模型 API 是否可访问。Render 和本项目的免费部署不包含 DeepSeek API 调用费用。
+检查 `LLM_PROVIDER=openrouter`、`OPENROUTER_API_KEY`、`OPENROUTER_MODEL` 是否配置，以及 OpenRouter API 是否可访问。Render 和本项目的免费部署不包含模型调用费用。
 
 ### 是否需要 Supabase
 

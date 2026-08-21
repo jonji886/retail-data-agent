@@ -14,7 +14,6 @@ fallback_count / fallback_rate，且按用例预期行为判定 PASS。
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -25,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.agent.graph import run_agent
-from app.llm.deepseek_client import DeepSeekConfig, load_env_file
+from app.llm.openrouter_client import OpenRouterConfig, load_env_file
 from app.quality.evaluation import _load_cases
 
 REPORT_PATH = ROOT / "reports" / "llm_evaluation_report.json"
@@ -128,14 +127,13 @@ def _delete_stale_report() -> None:
 
 def main() -> int:
     load_env_file(ROOT / ".env")
-    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
-    if not api_key:
+    if not OpenRouterConfig.is_configured(ROOT):
         _delete_stale_report()
-        print("SKIP: 未配置 DEEPSEEK_API_KEY，LLM E2E 评测跳过（不会生成报告）。")
+        print("SKIP: 未配置 OPENROUTER_API_KEY，LLM E2E 评测跳过（不会生成报告）。")
         print("确定性 baseline 评测请运行: python3 scripts/run_evaluation.py")
         return 0
 
-    model = os.getenv("DEEPSEEK_MODEL", DeepSeekConfig.from_env(ROOT).model)
+    model = OpenRouterConfig.from_env(ROOT).model
     cases = _load_cases(ROOT)
     print("Running LLM E2E evaluation on %d cases (model=%s)..." % (len(cases), model))
 

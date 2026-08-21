@@ -181,7 +181,9 @@ function，因此每条只读连接都显式关闭 DuckDB `enable_external_acces
 ### 两条链路
 
 - Deterministic Baseline：`scripts/run_evaluation.py`（无 API Key 可运行）
-- LLM E2E：`scripts/run_llm_evaluation.py`（需 API Key，无则 skip）
+- LLM E2E：`scripts/run_llm_evaluation.py`（通过 OpenRouter，需 API Key，无则 skip）
+
+OpenRouter 通过 OpenAI-compatible Chat Completions 接口调用。`OpenRouterNLQEngine.parse()` 每次只生成一次结构化 Query Plan，随后必须经过本地计划校验、相对时间策略、RBAC、语义层和只读 SQL 执行器；Key 缺失、网络/API 异常或计划非法时回退到确定性基线。回答润色同样只能使用已校验结果，不承担指标计算或权限判断。
 
 ### Relative Time Policy
 

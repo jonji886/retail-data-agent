@@ -1,4 +1,4 @@
-"""使用 DeepSeek-V4-Flash 进行中文问数。"""
+"""使用 OpenRouter 进行中文问数。"""
 
 from __future__ import annotations
 
@@ -10,14 +10,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.agent.llm_nlq import DeepSeekNLQEngine
+from app.agent.llm_nlq import OpenRouterNLQEngine
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="DeepSeek 中文问数")
+    parser = argparse.ArgumentParser(description="OpenRouter 中文问数")
     parser.add_argument("question", nargs="+", help="中文经营分析问题")
     args = parser.parse_args()
-    answer = DeepSeekNLQEngine(ROOT).answer(" ".join(args.question))
+    answer = OpenRouterNLQEngine(ROOT).answer(" ".join(args.question))
     print("模型：%s" % answer.parsed.metric.display_name)
     print("解析：维度=%s，过滤=%s，时间=%s，对比=%s" % (
         answer.parsed.dimensions or "整体",
@@ -34,4 +34,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
