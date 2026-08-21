@@ -36,7 +36,7 @@ TESTS_DIR = ROOT / "tests"
 
 # README Project Status 块中允许的键（单一事实来源）
 STATUS_KEYS = (
-    "Version", "Last verified", "Golden cases", "Evaluation cases", "Demo scenarios",
+    "Version", "Last verified", "Primary LLM Provider", "Golden cases", "Evaluation cases", "Demo scenarios",
     "Web tabs", "Unit test files", "Unit tests",
 )
 
@@ -218,6 +218,18 @@ def main() -> int:
         errors.append("README Web tabs 漂移")
     else:
         print("  OK: README Web tabs 与 web_app.py 一致")
+
+    # 4b. Provider 默认值：配置、README 与主客户端必须一致。
+    print("4b) Primary LLM Provider:")
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    provider_match = re.search(r"^LLM_PROVIDER=(\S+)", env_example, re.MULTILINE)
+    default_provider = provider_match.group(1).lower() if provider_match else ""
+    if default_provider != "deepseek" or status.get("Primary LLM Provider") != "DeepSeek":
+        print("  [FAIL] 默认 Provider 应为 DeepSeek（env=%s, README=%s）" % (
+            default_provider, status.get("Primary LLM Provider")))
+        errors.append("Primary LLM Provider 漂移")
+    else:
+        print("  OK: DeepSeek 为默认主 Provider，OpenRouter 仅作可选 fallback")
 
     # 5. LLM 报告可信度
     print("5) LLM evaluation report:")

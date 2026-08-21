@@ -44,7 +44,7 @@ def main() -> None:
     if report["security_defense_rate"] is not None:
         print("[Behavior] security defense rate: %.1f%%" % (report["security_defense_rate"] * 100))
     print("\n提示：LLM 增强评测需单独运行 python3 scripts/run_llm_evaluation.py，"
-          "未配置 OPENROUTER_API_KEY 时不会生成 LLM 报告（避免 0 calls / 100% 误导）。")
+          "未配置 DEEPSEEK_API_KEY 时不会生成 LLM 报告（避免 0 calls / 100% 误导）。")
 
     # 写入报告文件
     report_dir = ROOT / "reports"

@@ -90,6 +90,7 @@ def parse_request(state: AgentState) -> AgentState:
 
     data_source = state.get("_data_source")
     engine = NaturalLanguageQueryEngine(root, data_source=data_source)
+    question = _contextualize_follow_up(question, state.get("session_context", {}), engine)
     use_llm = state.get("_use_llm", False)  # type: ignore[assignment]
     llm_mode = state.get("_llm_mode", "demo")  # type: ignore[assignment]
     metadata_tool = MetadataTool(root / "data" / "retail.duckdb", data_source=data_source)
@@ -140,12 +141,13 @@ def parse_request(state: AgentState) -> AgentState:
                     llm_calls = list(state.get("llm_calls", []))
                     metadata = getattr(getattr(locals().get("llm_engine"), "client", None), "last_call_metadata", {})
                     llm_calls.append({
-                        "provider": "openrouter", "node": "parse_request",
+                        "provider": getattr(getattr(locals().get("llm_engine"), "config", None), "provider", "deepseek"), "node": "parse_request",
                         "status": "fallback", "model": getattr(getattr(locals().get("llm_engine"), "config", None), "model", "unknown"),
                         "fallback_model": "deterministic", "reason": type(exc).__name__,
                         "retry_count": metadata.get("retry_count", 0),
                         "provider_fallback_used": metadata.get("fallback_used", metadata.get("fallback_attempted", False)),
                         "fallback_provider": metadata.get("fallback_from") or metadata.get("fallback_provider"),
+                        "error_category": metadata.get("error_category"),
                     })
                     state = {**state, "llm_calls": llm_calls}  # type: ignore[assignment]
             else:
@@ -216,3 +218,32 @@ def _month_end(month: str) -> date:
     if m == 12:
         return date(year, 12, 31)
     return date(year, m + 1, 1) - timedelta(days=1)
+
+
+def _contextualize_follow_up(question: str, session_context: Dict[str, object], engine: NaturalLanguageQueryEngine) -> str:
+    """将当前页面内的极短追问补成可校验的完整问题。
+
+    只处理“那华东呢”这类明显承接上文的问题；完整问题原样返回，避免
+    引入长期记忆或让上下文绕过原有 NLQ / 权限校验。
+    """
+    clean = question.strip()
+    if not clean or not (clean.startswith(("那", "那么", "这个", "上述")) or len(clean) <= 6):
+        return question
+    previous = session_context.get("last_query_plan") if isinstance(session_context, dict) else None
+    if not isinstance(previous, dict) or not previous.get("metric"):
+        return question
+    try:
+        metric = engine.catalog.get(str(previous["metric"]))
+    except Exception:
+        return question
+    filters = dict(previous.get("filters") or {})
+    for dimension, config in engine.dimension_config.items():
+        for value in config.get("values", []):  # type: ignore[union-attr]
+            if value and value in clean:
+                filters[dimension] = value
+    date_text = ""
+    start_date = previous.get("start_date")
+    if isinstance(start_date, str) and len(start_date) >= 7:
+        date_text = start_date[:7].replace("-", "年") + "月"
+    filter_text = " ".join(filters.values())
+    return "%s %s %s" % (filter_text, date_text, metric.display_name)

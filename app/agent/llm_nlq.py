@@ -1,4 +1,4 @@
-"""使用 OpenRouter 解析自然语言，再交给确定性语义层执行。"""
+"""使用配置的主 LLM Provider 解析自然语言，再交给确定性语义层执行。"""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ class OpenRouterNLQEngine:
         self.client = OpenRouterClient(self.config)
 
     def parse(self, question: str) -> ParsedQuestion:
-        """调用 OpenRouter 生成计划，再通过本地规则完成严格校验。"""
+        """调用主 Provider 生成计划，再通过本地规则完成严格校验。"""
         plan_json = self.client.complete_json(self._system_prompt(), question)
         try:
             plan = self._parse_json(plan_json)

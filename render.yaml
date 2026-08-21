@@ -14,26 +14,28 @@ services:
       - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
         value: "false"
       - key: LLM_PROVIDER
-        value: openrouter
-      - key: OPENROUTER_API_KEY
-        sync: false
-      - key: OPENROUTER_BASE_URL
-        value: https://openrouter.ai/api/v1
-      - key: OPENROUTER_MODEL
-        sync: false
-      - key: OPENROUTER_FALLBACK_MODELS
-        sync: false
+        value: deepseek
       - key: DEEPSEEK_API_KEY
         sync: false
       - key: DEEPSEEK_BASE_URL
         value: https://api.deepseek.com
       - key: DEEPSEEK_MODEL
         value: deepseek-chat
+      - key: LLM_FALLBACK_PROVIDER
+        value: openrouter
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: OPENROUTER_MODEL
+        value: openrouter/free
+      - key: OPENROUTER_FALLBACK_MODELS
+        sync: false
       - key: LLM_MODEL
         sync: false
       - key: EVAL_LLM_MODEL
         sync: false
-      - key: OPENROUTER_TIMEOUT_SECONDS
+      - key: LLM_TIMEOUT_SECONDS
         value: "60"
       - key: OPENROUTER_MAX_TOKENS
         value: "1200"

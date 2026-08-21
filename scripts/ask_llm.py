@@ -1,4 +1,4 @@
-"""使用 OpenRouter 进行中文问数。"""
+"""使用配置的主 LLM Provider 进行中文问数。"""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from app.agent.llm_nlq import OpenRouterNLQEngine
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="OpenRouter 中文问数")
+    parser = argparse.ArgumentParser(description="DeepSeek 主 Provider 中文问数")
     parser.add_argument("question", nargs="+", help="中文经营分析问题")
     args = parser.parse_args()
     answer = OpenRouterNLQEngine(ROOT).answer(" ".join(args.question))

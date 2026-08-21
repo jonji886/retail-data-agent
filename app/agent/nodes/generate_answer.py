@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from app.agent.state import AgentState
-from app.presentation.decision_support import build_attribution_summary
+from app.presentation.decision_support import build_attribution_summary, build_recommended_questions
 
 
 def generate_answer(state: AgentState) -> AgentState:
@@ -36,7 +36,7 @@ def generate_answer(state: AgentState) -> AgentState:
     if use_llm:
         if not _llm_available(root, llm_mode):
             llm_calls.append({
-                "provider": "openrouter", "node": "generate_answer",
+                "provider": "deepseek", "node": "generate_answer",
                 "status": "fallback", "model": _configured_model(root, llm_mode),
                 "fallback_model": "deterministic", "reason": "provider_not_configured",
             })
@@ -48,7 +48,7 @@ def generate_answer(state: AgentState) -> AgentState:
                 if llm_answer:
                     answer = llm_answer
                     llm_calls.append({
-                        "provider": metadata.get("provider", "openrouter"),
+                        "provider": metadata.get("provider", "deepseek"),
                         "node": "generate_answer",
                         "status": "success", "model": metadata.get("model", _configured_model(root, llm_mode)),
                         "prompt_version": "v1",
@@ -57,7 +57,7 @@ def generate_answer(state: AgentState) -> AgentState:
             except Exception as exc:  # noqa: BLE001
                 metadata = getattr(exc, "llm_metadata", {})
                 llm_calls.append({
-                    "provider": metadata.get("provider", "openrouter"),
+                    "provider": metadata.get("provider", "deepseek"),
                     "node": "generate_answer",
                     "status": "fallback", "model": metadata.get("model", _configured_model(root, llm_mode)),
                     "fallback_model": "deterministic", "reason": type(exc).__name__,
@@ -75,7 +75,15 @@ def generate_answer(state: AgentState) -> AgentState:
         "status": "success", "used_llm": any(item.get("status") == "success" for item in llm_calls),
     })
 
-    return {**state, "answer": answer, "trace_events": events, "llm_calls": llm_calls}
+    return {
+        **state,
+        "answer": answer,
+        "recommended_questions": build_recommended_questions(
+            intent, result, state.get("query_plan", {})
+        ),
+        "trace_events": events,
+        "llm_calls": llm_calls,
+    }
 
 
 def _llm_available(root: Path, mode: str = "demo") -> bool:
@@ -84,12 +92,8 @@ def _llm_available(root: Path, mode: str = "demo") -> bool:
 
 
 def _configured_model(root: Path, mode: str = "demo") -> str:
-    from app.llm.openrouter_client import DEFAULT_MODEL, OpenRouterConfig, load_env_file
-    import os
-    if mode == "evaluation":
-        return OpenRouterConfig.from_env(root, mode=mode).model
-    load_env_file(root / ".env")
-    return os.getenv("LLM_MODEL", "").strip() or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    from app.llm.openrouter_client import provider_status
+    return str(provider_status(root).get("model", "deepseek-chat"))
 
 
 def _llm_summarize(root: Path, intent: str, result: Dict[str, Any],

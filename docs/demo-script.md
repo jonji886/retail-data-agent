@@ -11,7 +11,7 @@ source .venv/bin/activate
 streamlit run app/web_app.py   # 打开 http://localhost:8501
 ```
 
-浏览器保持 **Agent Tab** 打开，用户身份默认为"总部经理 (hq_manager)"。
+浏览器保持 **AI 分析助手** 打开，用户身份默认为“总部经理（演示身份）”。
 
 ---
 
@@ -19,7 +19,7 @@ streamlit run app/web_app.py   # 打开 http://localhost:8501
 
 > 对应 Golden Case `g018`（attribution）。核心叙事：Agent 不只是"查数"，而是"回答问题"。
 
-**操作**：在 Agent Tab 输入：
+**操作**：在 AI 分析助手输入：
 
 > 为什么华东区域 11 月销售额下降了？
 
@@ -33,13 +33,13 @@ streamlit run app/web_app.py   # 打开 http://localhost:8501
 
 **话术**："老板先看到的是结论和主要拖累因素；需要复核时再展开依据。这里的贡献结果说明数据变化来自哪里，但不把它冒充成未经验证的业务因果。"
 
-> 当前 MVP 已将执行过程收纳为默认折叠的“分析依据”，并展示结论、KPI、贡献图表和核查建议；点击下钻和自动执行追问仍未实现，完整要求见 [docs/decision-support-ui.md](decision-support-ui.md)。
+> 当前 MVP 已将执行过程收纳为默认折叠的“分析依据”，并展示结论、KPI、贡献图表和核查建议；点击推荐追问会自动继续分析，完整要求见 [docs/decision-support-ui.md](decision-support-ui.md)。
 
 ---
 
 ## Scenario 2 — 执行链路与 Trace（2 分钟）
 
-**操作**：在 Agent Tab 的回答区域下方，展开执行明细 / Trace。演示时将其定位为“分析依据”，不要把它当作老板主结论。
+**操作**：在 AI 分析助手回答区域下方，展开“查看分析依据”。演示时将其定位为依据，不要把它当作老板主结论。
 
 **讲解要点**（依次展示）：
 
@@ -81,7 +81,7 @@ streamlit run app/web_app.py   # 打开 http://localhost:8501
 
 ## Scenario 4 — 质量评测（1～2 分钟）
 
-> 切换到 **质量评测 Tab**。
+> 切换到 **治理后台 → Evaluation**。
 
 **讲解要点**：
 
@@ -113,4 +113,4 @@ A：数据是固定种子的虚拟数据；本地/CI 使用 DuckDB，公网近�
 A：本地/CI 仍使用 DuckDB 保持可复现性；作品集部署路径已支持 Supabase PostgreSQL。两者通过 `DataSourceBase` 复用同一语义层、权限和只读查询边界，避免把本地评测与公网运行环境混在一起。
 
 **Q：LLM 评测是怎么做的？**
-A：`run_llm_evaluation.py` 通过 OpenRouter 真实调用固定评测模型，并记录 provider / model / llm_calls / fallback_rate。配置 `DEEPSEEK_API_KEY` 后，OpenRouter 超时或报错会对同一请求最多切换一次 DeepSeek；两者都失败才走确定性 fallback。没有 OpenRouter Key 或固定 `EVAL_LLM_MODEL` 时明确 SKIP，不生成假报告。
+A：`run_llm_evaluation.py` 默认通过 DeepSeek 真实调用固定评测模型，并记录 primary/actual provider、model、llm_calls 和 fallback_rate。配置 `OPENROUTER_API_KEY` 后，DeepSeek 超时或报错会对同一请求最多切换一次 OpenRouter；两者都失败才走确定性 fallback。没有 DeepSeek Key 或固定模型时明确 SKIP，不生成假报告。

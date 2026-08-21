@@ -63,7 +63,7 @@ FastAPI API ──┘                                  ↓
                                                    ↓
                               DataSourceBase → DuckDB / PostgreSQL
 
-LLM：Application Service → OpenRouter 主 Provider → DeepSeek 故障切换 → 确定性 fallback
+LLM：Application Service → DeepSeek 主 Provider → OpenRouter 可选故障切换 → 确定性 fallback
 横切：Trace / Audit / Metrics / Quota / Retry / Fallback / Evaluation
 ```
 
@@ -178,11 +178,11 @@ PostgreSQL 由连接参数提供 statement timeout；DuckDB 当前提供资源�
 ### 两条链路
 
 - Deterministic Baseline：`scripts/run_evaluation.py`（无 API Key 可运行）
-- LLM E2E：`scripts/run_llm_evaluation.py`（通过 OpenRouter 固定 `EVAL_LLM_MODEL`，使用 Supabase PostgreSQL；可选 `DEEPSEEK_API_KEY` 故障切换；无 Supabase / OpenRouter Key / 固定模型则 skip）
+- LLM E2E：`scripts/run_llm_evaluation.py`（默认通过 DeepSeek 固定 `EVAL_LLM_MODEL`，使用 Supabase PostgreSQL；可选 `OPENROUTER_API_KEY` 故障切换；无 Supabase / DeepSeek Key / 固定模型则 skip）
 
-OpenRouter 通过 OpenAI-compatible Chat Completions 接口调用。主 Provider 按
-`LLM_MAX_RETRIES` 有限重试仍超时或报错时，如果配置了 `DEEPSEEK_API_KEY`，客户端对
-同一请求最多切换一次 DeepSeek（默认 `https://api.deepseek.com`、`deepseek-chat`）。
+DeepSeek 通过 OpenAI-compatible Chat Completions 接口调用。主 Provider 按
+`LLM_MAX_RETRIES` 有限重试仍超时或报错时，如果配置了 `OPENROUTER_API_KEY`，客户端对
+同一请求最多切换一次 OpenRouter（默认 `https://api.deepseek.com`、`deepseek-chat`）。
 两个 Provider 都失败时，或结构化输出经最多一次补请求仍非法时，回退到确定性基线。
 无论由哪个 Provider 生成计划，都必须经过本地计划校验、相对时间策略、RBAC、语义层
 和只读 SQL 执行器；Provider failover 不会绕过这些边界。
@@ -270,7 +270,7 @@ Evidence Drawer（Plan / Permission / SQL / Trace / Audit）
 - 技术细节默认折叠，但权限拒绝、异常和失败状态必须显式可见；
 - 下钻和后续追问继续沿用 RBAC + Data Scope，不得因可视化扩大权限。
 
-当前 Streamlit MVP 已实现第一版展示层：结论、KPI、贡献表与横向柱状图、核查建议以及默认折叠的依据区。展示模型位于 `app/presentation/decision_support.py`，不重新计算指标；贡献因素点击下钻、追问按钮自动执行和跨图表联动仍未实现。产品验收要求与示例见 `docs/decision-support-ui.md`。
+当前 Streamlit MVP 已实现第一版展示层：结论、KPI、贡献表与横向柱状图、核查建议以及默认折叠的依据区。展示模型位于 `app/presentation/decision_support.py`，不重新计算指标；推荐追问通过结构化响应和页面 Session 自动执行，贡献因素点击下钻与跨图表联动仍未实现。产品验收要求与示例见 `docs/decision-support-ui.md`。
 
 ## 12. 未来扩展
 
@@ -278,6 +278,6 @@ Evidence Drawer（Plan / Permission / SQL / Trace / Audit）
 - Durable Checkpointer（Redis / PostgreSQL）
 - Human-in-the-loop（加入写操作 Tool 时）
 - 统计/时序模型预警
-- 多轮上下文
+- 页面 Session 级轻量上下文（最近问题、Query Plan、指标、维度和时间范围）；不跨会话持久化
 - Render Free Demo 部署（当前路径见 `docs/deploy-render.md`）
 - 生产级公网部署与监控

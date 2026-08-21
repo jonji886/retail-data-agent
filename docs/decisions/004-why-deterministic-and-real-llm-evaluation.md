@@ -14,7 +14,7 @@
 
 ## Decision
 
-选择第三种。普通 CI 运行 DuckDB + Deterministic Regression；手动 E2E 必须配置 `EVAL_LLM_MODEL` 的具体模型，报告记录 provider、model、调用数、fallback、延迟和 token。
+选择第三种。普通 CI 运行 DuckDB + Deterministic Regression；手动 E2E 默认调用 DeepSeek（可用 `EVAL_LLM_MODEL` 覆盖具体模型），报告记录 primary/actual provider、model、调用数、fallback、延迟和 token。
 
 ## Trade-offs
 
@@ -22,4 +22,4 @@
 
 ## Consequences
 
-Demo 可以使用 `openrouter/free`，Evaluation 禁止使用动态免费 Router，README 不再把两类指标包装成一个数字。
+Demo 默认使用 `deepseek-chat`，OpenRouter 仅作可选 fallback；Evaluation 禁止使用动态免费 Router，README 不再把两类指标包装成一个数字。

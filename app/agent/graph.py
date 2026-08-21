@@ -134,6 +134,7 @@ def run_agent(
     llm_mode: str = "demo",
     thread_id: str = "",
     data_source: Optional[DataSourceBase] = None,
+    session_context: Optional[Dict[str, Any]] = None,
 ) -> AgentState:
     """运行一次完整的 Agent 流程，返回最终 state。"""
     if llm_mode not in {"demo", "evaluation"}:
@@ -142,6 +143,7 @@ def run_agent(
     from app.agent.state import new_state
     state = new_state(question=question, user_id=user_id, role=role,
                       data_scope=data_scope, thread_id=thread_id)
+    state["session_context"] = dict(session_context or {})
     # 注入运行时上下文（非 TypedDict 字段，但 dict 允许）
     state["_root"] = str(root)  # type: ignore[typeddict-unknown-key]
     state["_use_llm"] = use_llm  # type: ignore[typeddict-unknown-key]

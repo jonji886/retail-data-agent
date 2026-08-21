@@ -154,7 +154,7 @@ def main() -> int:
     load_env_file(ROOT / ".env")
     if not OpenRouterConfig.is_configured(ROOT, mode="evaluation"):
         _delete_stale_report()
-        print("SKIP: 未配置 OPENROUTER_API_KEY 或固定 EVAL_LLM_MODEL，LLM E2E 评测跳过（不会生成报告）。")
+        print("SKIP: 未配置 DEEPSEEK_API_KEY 或可用固定模型，LLM E2E 评测跳过（不会生成报告）。")
         print("确定性 baseline 评测请运行: python3 scripts/run_evaluation.py")
         return 0
 
@@ -232,6 +232,8 @@ def main() -> int:
             "latency_ms": int(latency * 1000),
             "llm_calls": llm_calls, "fallback": fallback > 0,
             "llm_providers": [entry.get("provider") for entry in entries if entry.get("provider")],
+            "primary_provider": config.provider,
+            "actual_provider": next((entry.get("provider") for entry in reversed(entries) if entry.get("provider")), config.provider),
             "fallback_events": [
                 {
                     "provider": entry.get("provider"),
@@ -264,6 +266,7 @@ def main() -> int:
     report: Dict[str, Any] = {
         "mode": "llm",
         "provider": config.provider,
+        "primary_provider": config.provider,
         "model": model,
         "data_source": "postgresql",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -283,6 +286,7 @@ def main() -> int:
         "fallback_count": total_fallbacks,
         "fallback_case_count": fallback_cases,
         "fallback_rate": fallback_rate,
+        "actual_providers": sorted({provider for item in results for provider in item.get("llm_providers", []) if provider}),
         "total_latency_s": total_latency,
         "latency_ms": int(total_latency * 1000),
         "input_tokens": input_tokens,

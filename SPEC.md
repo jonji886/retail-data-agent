@@ -41,7 +41,7 @@ Last verified: 2026-08-21
 
 - 有状态编排图：`parse_request → policy_check → execute_skill → validate_result → generate_answer`，含 unsupported / denied / error 分支。
 - 查询计划（Query Plan）：intent / metric / dimensions / filters / time range / comparison 的结构化中间产物。
-- 双链路解析：确定性基线（NLQ Engine）+ OpenRouter LLM 增强（需 API Key）；OpenRouter 按有限重试仍超时/报错时，若配置 `DEEPSEEK_API_KEY`，同一请求最多切换一次 DeepSeek，两个 Provider 都失败后回退到确定性链路，并记录实际 provider / model / fallback 原因。
+- 双链路解析：确定性基线（NLQ Engine）+ DeepSeek LLM 增强（需 `DEEPSEEK_API_KEY`）；DeepSeek 按有限重试仍超时/报错时，若配置 `OPENROUTER_API_KEY`，同一请求最多切换一次 OpenRouter，两个 Provider 都失败后回退到确定性链路，并记录主/实际 provider、model、fallback 原因。
 
 ### 4.2 语义层与工具
 
@@ -69,8 +69,8 @@ Last verified: 2026-08-21
 
 - Golden Dataset：`configs/evaluation/golden_questions.json`，35 个用例，覆盖 9 类场景（normal / expression / trend / attribution / anomaly / report / boundary / permission / security）。
 - Evaluation 2.0：分层指标（Plan Accuracy、Executable Success Rate、Result Accuracy、Unsupported Reject Rate、Permission Safety Pass Rate、Security Defense Rate、Overall Pass Rate）。
-- LLM E2E 评测：真实调用 OpenRouter 固定模型，并使用 Supabase PostgreSQL 验证公网近生产执行链路；可选配置 `DEEPSEEK_API_KEY` 用于 OpenRouter 超时/错误时的跨 Provider fallback。记录 model / provider / data_source / llm_calls / fallback，未配置 Supabase、OpenRouter Key 或固定模型时明确 SKIP 且不生成报告。
-- Demo / Evaluation 模型配置分离：Demo 可使用 `LLM_MODEL=openrouter/free`，Evaluation 必须使用固定具体模型 `EVAL_LLM_MODEL`。
+- LLM E2E 评测：默认真实调用 DeepSeek 固定模型，并使用 Supabase PostgreSQL 验证公网近生产执行链路；可选配置 `OPENROUTER_API_KEY` 用于 DeepSeek 超时/错误时的跨 Provider fallback。记录 primary/actual provider、model、data_source、llm_calls 和 fallback，未配置 Supabase、DeepSeek Key 或固定模型时明确 SKIP 且不生成报告。
+- Demo / Evaluation 模型配置分离：Demo 默认使用 `DEEPSEEK_MODEL=deepseek-chat`，Evaluation 可使用 `EVAL_LLM_MODEL` 覆盖但不能使用 `openrouter/free`。
 - API Boundary：FastAPI 提供 `/api/v1/query`、`/health`、`/ready`，与 Streamlit 共享 Application Service。
 - Demo quota：session/IP/global daily quota 在 LLM 请求前执行；Operational Metrics 记录请求、成功、失败、延迟、fallback、权限和数据源。
 - 相对时间策略：`过去/最近/近 N 个月`、自然月和滚动天数由 `app/domain/time_range.py` 统一解析，LLM 计划不能覆盖该规则。
@@ -82,15 +82,15 @@ Last verified: 2026-08-21
 
 ### 4.6 Web Demo（Streamlit）
 
-- 6 个 Tab：经营总览 / Agent / 自然语言问数 / 预警与归因 / 智能报告 / 质量评测。
+- 3 个一级区域：经营工作台 / AI 分析助手 / 治理后台。业务工作台内含经营总览、经营预警和报告中心；治理后台集中 Provider、权限演示、Trace / Audit 与 Evaluation。
 - 支持切换用户身份（权限）、LLM 开关、审计记录查看。
-- Agent Tab 已实现第一版老板视角展示：结论、KPI、主要下降贡献图表、贡献明细、核查建议、推荐追问和折叠的技术依据。
-- Agent 业务回答必须把数据变化贡献与已验证业务因果区分开；点击下钻和自动执行后续追问尚未实现，页面要求记录在 `docs/decision-support-ui.md`。
+- AI 分析助手已实现结论、KPI、主要下降贡献图表、贡献明细、核查建议、结构化推荐追问和折叠的技术依据。
+- 推荐追问最多 4 条，点击后自动回填并调用同一 Application Service，继承当前用户身份、Data Scope 和页面会话上下文；业务回答必须把数据变化贡献与已验证业务因果区分开。
 
 ### 4.7 数据源与部署
 
 - `scripts/init_postgres.py` 完成 PostgreSQL/Supabase 的 schema creation、Demo data import、views、indexes 和 validation。
-- Render 配置支持 `DATA_SOURCE=postgresql`、`DATABASE_URL`、OpenRouter、可选 DeepSeek fallback 和 Demo quota；启动前执行语义层与数据源健康检查。
+- Render 配置支持 `DATA_SOURCE=postgresql`、`DATABASE_URL`、DeepSeek 主 Provider、可选 OpenRouter fallback 和 Demo quota；启动前执行语义层与数据源健康检查。
 
 ### 4.8 数据
 
@@ -133,7 +133,7 @@ Last verified: 2026-08-21
 2. `Golden Dataset 数量（35）== README 描述 == 评测报告 total`；
 3. `Web Demo Tab 数量（6）== README 描述 == web_app.py 实际`；
 4. `Overall Pass Rate` 与 `Executable Success Rate` 口径可解释、不冲突；
-5. 全部单元测试通过（当前 18 文件 / 112 用例）；
+5. 全部单元测试通过（当前 19 文件 / 119 用例）；
 6. 任何指标或能力声明都能在代码 / 测试 / 报告中找到证据。
 
 ## 9. Future（Out of Scope，未实现不宣传）
@@ -142,4 +142,4 @@ Last verified: 2026-08-21
 - 多 Agent 协作与工具生态（MCP 等）；
 - 真实 LLM 在线评测自动进入每次 PR；
 - 更细粒度的审计可视化。
-- 决策支持视图增强：贡献因素点击下钻、追问按钮自动执行、跨图表联动和更多业务数据源；当前第一版要求见 `docs/decision-support-ui.md`。
+- 决策支持视图增强：贡献因素点击下钻、跨图表联动和更多业务数据源；推荐追问按钮自动执行已实现，当前要求见 `docs/decision-support-ui.md`。

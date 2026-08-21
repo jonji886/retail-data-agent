@@ -7,9 +7,9 @@
 
 流程：
 1. 启动 Streamlit（若未运行）
-2. 打开 Agent Tab，运行归因问题，截取回答主界面
+2. 打开 AI 分析助手，运行归因问题，截取回答主界面
 3. 展开执行链路 / Trace，截取链路明细
-4. 打开质量评测 Tab，截取指标面板
+4. 打开治理后台 → Evaluation，截取指标面板
 
 用法:
     python3 scripts/capture_demo_shots.py

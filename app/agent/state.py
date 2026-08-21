@@ -50,6 +50,9 @@ class AgentState(TypedDict, total=False):
 
     # 响应
     answer: Optional[str]
+    recommended_questions: List[str]
+    # 当前页面会话的轻量上下文；不是长期记忆，也不跨用户持久化。
+    session_context: Dict[str, Any]
 
     # 可观测
     trace_id: str
@@ -81,4 +84,6 @@ def new_state(question: str, user_id: str = "user_hq", role: str = "hq_manager",
         tool_results=[],
         trace_events=[],
         llm_calls=[],
+        recommended_questions=[],
+        session_context={},
     )

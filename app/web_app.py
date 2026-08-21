@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 import time
 import uuid
@@ -18,13 +17,15 @@ from app.application import AgentApplicationService
 from app.data_sources.factory import create_data_source
 from app.agent.llm_nlq import OpenRouterNLQEngine
 from app.agent.nlq import NaturalLanguageQueryEngine
-from app.llm.openrouter_client import DEFAULT_MODEL, OpenRouterConfig, load_env_file
+from app.llm.openrouter_client import provider_status
 from app.analytics.anomaly import SalesAnomalyDetector
 from app.analytics.attribution import SalesAttributor
 from app.quality.audit import AuditLogger
 from app.quality.evaluation import run_golden_v2
 from app.observability.runtime_logging import log_event, request_log_context
+from app.observability.metrics import GLOBAL_METRICS
 from app.presentation.decision_support import (
+    DIMENSION_LABELS,
     build_attribution_summary,
     build_attribution_table,
     build_follow_up_questions,
@@ -70,11 +71,9 @@ def selected_region(settings: Dict[str, str]):
 
 
 def openrouter_status() -> tuple[bool, str]:
-    """返回当前进程看到的 OpenRouter 配置状态，不暴露 API Key。"""
-    configured = OpenRouterConfig.is_configured(ROOT)
-    load_env_file(ROOT / ".env")
-    model = os.getenv("LLM_MODEL", "").strip() or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
-    return configured, model
+    """兼容旧调用方：返回当前主 Provider 是否可用与模型名。"""
+    status = provider_status(ROOT)
+    return status["status"] == "available", str(status["model"])
 
 
 def render_sidebar() -> Dict[str, str]:
@@ -83,7 +82,12 @@ def render_sidebar() -> Dict[str, str]:
     st.sidebar.divider()
     month = st.sidebar.selectbox("分析月份", ["2025-11", "2025-10", "2025-09", "2025-08"], index=0)
     region = st.sidebar.selectbox("分析范围", ["华东", "华南", "华北", "西南", "全部区域"], index=0)
-    dimension = st.sidebar.selectbox("归因维度", ["store_name", "city_name", "category_name", "brand_name", "channel_name"], index=0)
+    dimension = st.sidebar.selectbox(
+        "归因维度",
+        list(DIMENSION_LABELS),
+        index=0,
+        format_func=lambda value: DIMENSION_LABELS.get(value, value),
+    )
     st.sidebar.divider()
     st.sidebar.info("数据范围：2024～2025 年虚拟零售数据\n\n模型只生成查询计划或报告文字，SQL 和指标计算由本地逻辑完成。")
     return {"month": month, "region": region, "dimension": dimension}
@@ -100,7 +104,11 @@ def render_overview(settings: Dict[str, str]) -> None:
     st.markdown("### 销售趋势")
     trend = {item["period"]: item["sales_amount"] for item in context.trend}
     st.line_chart(trend, y_label="销售额", x_label="月份")
-    st.dataframe(context.trend, width="stretch", hide_index=True)
+    st.dataframe([
+        {"月份": item.get("period"), "销售额": money(item.get("sales_amount", 0)),
+         "毛利率": percent(item.get("gross_margin_rate"))}
+        for item in context.trend
+    ], width="stretch", hide_index=True)
 
     st.markdown("### 当前预警")
     if context.anomalies:
@@ -113,7 +121,7 @@ def render_overview(settings: Dict[str, str]) -> None:
 
 
 def render_ask() -> None:
-    st.subheader("自然语言问数")
+    st.subheader("AI 分析助手（兼容入口）")
     st.caption("先由模型或规则识别查询计划，再由语义层生成只读 SQL。")
     examples = [
         "2025年11月华东区域销售额同比变化",
@@ -124,10 +132,10 @@ def render_ask() -> None:
     question = st.text_input("请输入经营问题", value=examples[0])
     llm_ready, model = openrouter_status()
     if llm_ready:
-        st.caption("OpenRouter 已配置（模型：%s），调用结果仍会经过本地语义层、权限和只读 SQL 校验。" % model)
+        st.caption("主模型已配置（模型：%s），调用结果仍会经过本地语义层、权限和只读 SQL 校验。" % model)
     else:
-        st.info("当前未配置 OpenRouter API Key，仅提供确定性基线。Render 部署请在 Environment 中添加 OPENROUTER_API_KEY 后重新部署。")
-    openrouter_mode = "OpenRouter（%s）" % model
+        st.info("当前未配置主模型 Key，仅提供确定性基线。可在运行环境中配置 DEEPSEEK_API_KEY。")
+    openrouter_mode = "主模型（%s）" % model
     modes = ["确定性基线"] + ([openrouter_mode] if llm_ready else [])
     mode = st.radio("解析模式", modes, horizontal=True)
     logger = AuditLogger(ROOT)
@@ -232,13 +240,13 @@ def render_alerts(settings: Dict[str, str]) -> None:
 def render_report(settings: Dict[str, str]) -> None:
     st.subheader("智能经营报告")
     llm_ready, model = openrouter_status()
-    use_llm = st.checkbox("使用 OpenRouter 生成报告文字", value=llm_ready, disabled=not llm_ready)
+    use_llm = st.checkbox("使用模型生成报告文字", value=llm_ready, disabled=not llm_ready)
     if llm_ready:
-        st.caption("已连接 OpenRouter（模型：%s）。报告中的 KPI、趋势和归因数字仍由本地逻辑生成。" % model)
+        st.caption("已连接主模型（模型：%s）。报告中的 KPI、趋势和归因数字仍由本地逻辑生成。" % model)
     else:
-        st.info("未配置 OPENROUTER_API_KEY，当前只能生成确定性报告。")
+        st.info("未配置主模型 Key，当前只能生成确定性报告。")
     if use_llm:
-        st.info("报告会先汇总本地数据，再调用 OpenRouter 组织文字，通常需要 10～60 秒；请保持页面打开。")
+        st.info("报告会先汇总本地数据，再调用主模型组织文字，通常需要 10～60 秒；请保持页面打开。")
     else:
         st.caption("确定性报告只使用本地数据，通常几秒内完成。")
     if st.button("生成报告", type="primary"):
@@ -256,7 +264,7 @@ def render_report(settings: Dict[str, str]) -> None:
                     status.write("1/2 正在汇总 KPI、趋势、预警和归因数据…")
                     context = report_builder().build_context(settings["month"], selected_region(settings), settings["dimension"])
                     if use_llm:
-                        status.write("2/2 正在调用 OpenRouter 组织报告文字…")
+                        status.write("2/2 正在调用主模型组织报告文字…")
                         from app.llm.openrouter_client import OpenRouterClient, OpenRouterConfig
                         report = RetailReportBuilder.to_openrouter_markdown(context, OpenRouterClient(OpenRouterConfig.from_env(ROOT)))
                     else:
@@ -278,7 +286,7 @@ def render_report(settings: Dict[str, str]) -> None:
                 error_type=type(exc).__name__,
                 latency_ms=int(elapsed * 1000),
             )
-            st.error("报告生成失败（耗时 %.1f 秒）。请检查网络、OpenRouter API Key 或稍后重试。错误类型：%s\n诊断编号：%s" % (
+            st.error("报告生成失败（耗时 %.1f 秒）。请检查网络、主模型 API Key 或稍后重试。错误类型：%s\n诊断编号：%s" % (
                 elapsed, type(exc).__name__, diagnostic.get("trace_id") or diagnostic.get("request_id", "N/A")
             ))
     if st.session_state.get("report"):
@@ -366,9 +374,9 @@ def _render_attribution_business_view(result: Dict[str, Any]) -> None:
         st.markdown("- %s" % question)
 
 
-def render_agent() -> None:
-    st.subheader("Agent")
-    st.caption("输入经营问题，Agent 自动识别意图并编排 Skill 与 Tool 执行。")
+def render_agent_legacy() -> None:
+    st.subheader("AI 分析助手（兼容入口）")
+    st.caption("输入经营问题，系统自动识别并编排受治理的分析流程。")
     examples = [
         "华东区域 2025 年 11 月销售额是多少？环比怎么样？",
         "为什么华东区域 11 月销售额下降了？",
@@ -385,11 +393,11 @@ def render_agent() -> None:
     }
     user_label = cols[0].selectbox("当前用户（权限）", list(user_options.keys()))
     llm_ready, model = openrouter_status()
-    use_llm = cols[1].checkbox("使用 LLM（OpenRouter）", value=llm_ready, disabled=not llm_ready)
+    use_llm = cols[1].checkbox("使用模型辅助", value=llm_ready, disabled=not llm_ready)
     if llm_ready:
-        st.caption("OpenRouter 已配置（模型：%s）；模型只负责计划/文字，权限、SQL 和指标计算仍由本地逻辑负责。" % model)
+        st.caption("主模型已配置（模型：%s）；模型只负责计划/文字，权限、SQL 和指标计算仍由本地逻辑负责。" % model)
     else:
-        st.info("未配置 OPENROUTER_API_KEY，Agent 将使用确定性基线。请在 Render Environment 添加 Key 后重新部署。")
+        st.info("未配置主模型 Key，Agent 将使用确定性基线。")
     run_btn = cols[2].button("执行 Agent", type="primary")
     user_id, role, data_scope = user_options[user_label]
 
@@ -461,9 +469,9 @@ def render_agent() -> None:
                 success_calls = [item for item in llm_calls if item.get("status") == "success"]
                 fallback_calls = [item for item in llm_calls if item.get("status") == "fallback"]
                 if success_calls:
-                    st.success("OpenRouter 已调用 %d 次。" % len(success_calls))
+                    st.success("主模型已调用 %d 次。" % len(success_calls))
                 if fallback_calls:
-                    st.warning("OpenRouter 未完成调用，已回退到确定性结果；不会影响权限和 SQL 安全校验。")
+                    st.warning("主模型未完成调用，已回退到确定性结果；不会影响权限和 SQL 安全校验。")
 
             trace_events = state.get("trace_events", [])
             if trace_events:
@@ -509,6 +517,152 @@ def render_agent() -> None:
     st.markdown("### 推荐问题")
     for item in examples:
         st.markdown("- %s" % item)
+
+
+def _business_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """把结果表的内部字段映射为业务标签，查询与权限仍使用原字段。"""
+    labels = {
+        **DIMENSION_LABELS,
+        "region_name": "区域", "month_start": "月份", "week_start": "周", "sale_date": "日期",
+        "value": "指标值", "current_value": "当前值", "comparison_value": "对比值",
+        "change": "变化额", "change_rate": "变化比例",
+    }
+    return {labels.get(key, key): value for key, value in row.items()}
+
+
+def _render_agent_evidence(state: Dict[str, Any]) -> None:
+    """技术依据抽屉：业务页面默认隐藏，但完整链路仍可复核。"""
+    with st.expander("查看分析依据", expanded=False):
+        rows = []
+        if state.get("intent"):
+            rows.append({"步骤": "查询类型", "结果": state.get("intent")})
+        if state.get("permission_decision"):
+            rows.append({"步骤": "权限范围", "结果": state.get("permission_decision")})
+        if state.get("current_skill"):
+            rows.append({"步骤": "分析技能", "结果": state.get("current_skill")})
+        if rows:
+            st.dataframe(rows, width="stretch", hide_index=True)
+        llm_calls = state.get("llm_calls", [])
+        if llm_calls:
+            st.dataframe([
+                {"Provider": item.get("provider"), "Model": item.get("model"),
+                 "状态": item.get("status"),
+                 "Fallback": bool(item.get("fallback_used") or item.get("provider_fallback_used")),
+                 "故障类别": item.get("error_category") or item.get("fallback_reason", "")}
+                for item in llm_calls
+            ], width="stretch", hide_index=True)
+        trace_events = state.get("trace_events", [])
+        if trace_events:
+            st.dataframe([
+                {"节点": e.get("node"), "状态": e.get("status", ""), "延迟(ms)": e.get("latency_ms", "")}
+                for e in trace_events
+            ], width="stretch", hide_index=True)
+        for tr in state.get("tool_results", []):
+            data = tr.get("data") or {}
+            if isinstance(data, dict) and data.get("sql"):
+                st.code(data["sql"], language="sql")
+            if isinstance(data, dict) and data.get("comparison_sql"):
+                st.code(data["comparison_sql"], language="sql")
+        result = state.get("result") or {}
+        if isinstance(result, dict) and result.get("metric_definition"):
+            st.write("指标口径：", result["metric_definition"])
+        st.caption("request_id: %s | trace_id: %s" % (state.get("request_id", ""), state.get("trace_id", "")))
+
+
+def render_ai_assistant() -> None:
+    """统一的 AI 分析助手入口，推荐追问点击后自动继续运行。"""
+    next_question = st.session_state.pop("agent_next_question", None)
+    if next_question:
+        st.session_state["agent_question"] = next_question
+        st.session_state["agent_auto_submit"] = True
+
+    st.subheader("AI 分析助手")
+    st.caption("输入经营问题，系统会自动完成理解、权限校验、指标查询和业务解读。")
+    examples = [
+        "华东区域 2025 年 11 月销售额是多少？环比怎么样？",
+        "为什么华东区域 11 月销售额下降了？",
+        "哪些门店销售下降最明显？",
+    ]
+    st.caption("可以直接尝试：" + " · ".join(examples))
+    question = st.text_input("请输入经营问题", key="agent_question", placeholder=examples[1])
+    cols = st.columns(3)
+    user_options = {
+        "总部经理（演示身份）": ("user_hq", "hq_manager", {"scope": "all"}),
+        "华东区域经理（演示身份）": ("user_east", "region_manager", {"scope": "region", "region_name": "华东"}),
+        "门店经理（演示身份）": ("user_store_01", "store_manager", {"scope": "store", "store_id": "S001", "store_name": "上海旗舰店1店"}),
+    }
+    user_label = cols[0].selectbox("当前演示身份", list(user_options.keys()), key="agent_user")
+    llm_ready, model = openrouter_status()
+    use_llm = cols[1].checkbox("启用模型辅助", value=llm_ready, disabled=not llm_ready, key="agent_use_llm")
+    if llm_ready:
+        st.caption("模型：%s；权限、指标口径和 SQL 仍由确定性系统控制。" % model)
+    else:
+        st.info("当前未配置主模型，将使用确定性分析链路；不影响权限和数据安全边界。")
+    run_btn = cols[2].button("开始分析", type="primary")
+    user_id, role, data_scope = user_options[user_label]
+    should_run = bool(run_btn or st.session_state.pop("agent_auto_submit", False))
+    if should_run and question.strip():
+        if "session_id" not in st.session_state:
+            st.session_state["session_id"] = "st_" + uuid.uuid4().hex[:12]
+        with st.status("正在分析…", expanded=True) as status:
+            status.write("理解问题 → 校验权限 → 查询数据 → 生成经营结论 → 记录依据")
+            try:
+                state = agent_service().query(
+                    question, user_id=user_id, role=role, data_scope=data_scope,
+                    use_llm=use_llm, session_id=st.session_state.get("session_id", "streamlit"),
+                    session_context=st.session_state.get("agent_context", {}),
+                )
+                st.session_state["agent_state"] = state
+                st.session_state["agent_context"] = state.get("session_context", {})
+                status.update(label="分析完成", state="complete", expanded=False)
+            except Exception as exc:  # noqa: BLE001
+                status.update(label="分析失败", state="error", expanded=False)
+                st.error("暂时无法完成分析：%s" % type(exc).__name__)
+
+    state = st.session_state.get("agent_state")
+    if not state:
+        return
+    intent = state.get("intent", "")
+    error_type = state.get("error_type")
+    answer = state.get("answer", "")
+    result = state.get("result") or {}
+    if error_type:
+        st.error(answer or "分析失败，请检查问题范围或稍后重试。")
+    elif answer:
+        st.success("分析完成")
+        st.markdown("### 经营结论")
+        st.info(answer)
+    if intent == "attribution_analysis" and isinstance(result, dict) and result:
+        _render_attribution_business_view(result)
+    if isinstance(result, dict) and result.get("rows"):
+        st.markdown("### 关键证据")
+        st.dataframe([_business_row(row) for row in result["rows"]], width="stretch", hide_index=True)
+    if isinstance(result, dict) and result.get("anomalies"):
+        st.markdown("### 异常变化")
+        st.dataframe([
+            {"等级": a.get("severity", "").upper(), "对象": a.get("entity_name"),
+             "当前销售额": money(a.get("current_value", 0)), "变化率": percent(a.get("change_rate"))}
+            for a in result["anomalies"]
+        ], width="stretch", hide_index=True)
+    if isinstance(result, dict) and result.get("markdown"):
+        st.markdown("### 报告内容")
+        st.download_button("下载 Markdown", result["markdown"], file_name="经营分析报告.md")
+        st.markdown(result["markdown"])
+
+    questions = state.get("recommended_questions", [])
+    if questions:
+        st.markdown("### 推荐继续追问")
+        st.caption("点击后会自动带着当前演示身份和数据范围继续分析。")
+        for index, follow_up in enumerate(questions[:4]):
+            if st.button(follow_up, key="agent_follow_up_%d" % index, use_container_width=True):
+                st.session_state["agent_next_question"] = follow_up
+                st.rerun()
+    _render_agent_evidence(state)
+
+
+def render_agent() -> None:
+    """兼容旧入口名称，实际渲染统一的 AI 分析助手。"""
+    render_ai_assistant()
 
 
 def render_quality() -> None:
@@ -562,24 +716,81 @@ def render_quality() -> None:
         st.info("尚无 Badcase 记录。")
 
 
+def render_business_workspace(settings: Dict[str, str]) -> None:
+    """业务工作台：业务用户只需在三个业务视图中选择关注点。"""
+    st.subheader("经营工作台")
+    view = st.selectbox("工作台视图", ["经营总览", "经营预警", "报告中心"], key="business_view")
+    if view == "经营总览":
+        render_overview(settings)
+    elif view == "经营预警":
+        render_alerts(settings)
+    else:
+        render_report(settings)
+
+
+def render_governance() -> None:
+    """治理后台：集中展示 Provider、权限演示、审计与评测。"""
+    st.subheader("治理后台")
+    st.caption("面向技术人员和管理员；以下身份切换仅用于 Demo，不代表生产认证方式。")
+    view = st.selectbox("治理视图", ["AI 运行状态", "权限与数据范围", "Trace / Audit", "Evaluation"], key="governance_view")
+    if view == "AI 运行状态":
+        status = provider_status(ROOT)
+        metrics = GLOBAL_METRICS.snapshot()
+        cols = st.columns(6)
+        cols[0].metric("主 Provider", "DeepSeek" if status["primary_provider"] == "deepseek" else "OpenRouter")
+        cols[1].metric("Model", status["model"])
+        cols[2].metric("状态", "Available" if status["status"] == "available" else "Not configured")
+        cols[3].metric("Fallback", status["fallback_provider"])
+        cols[4].metric("请求数", metrics.get("request_count", 0))
+        cols[5].metric("Fallback 次数", metrics.get("fallback_count", 0))
+        st.caption(
+            "调用统计：成功 %s · 失败 %s · 权限拒绝 %s · 不支持请求 %s · Fallback 比例 %.1f%%"
+            % (
+                metrics.get("success_count", 0),
+                metrics.get("failure_count", 0),
+                metrics.get("permission_deny_count", 0),
+                metrics.get("unsupported_count", 0),
+                float(metrics.get("fallback_rate", 0.0)) * 100,
+            )
+        )
+        st.info("模型只负责查询计划理解和文字表达；RBAC、Data Scope、语义指标、只读 SQL 与审计由本地确定性系统控制。")
+    elif view == "权限与数据范围":
+        st.markdown("### Demo Identity Switcher")
+        st.dataframe([
+            {"演示身份": "总部经理", "Role": "hq_manager", "允许范围": "全部区域"},
+            {"演示身份": "区域经理", "Role": "region_manager", "允许范围": "所属区域（示例：华东）"},
+            {"演示身份": "门店经理", "Role": "store_manager", "允许范围": "所属门店（示例：上海旗舰店1店）"},
+        ], width="stretch", hide_index=True)
+        st.caption("生产环境应接入 Enterprise SSO / OIDC；页面中的身份切换仅用于验证权限边界。")
+    elif view == "Trace / Audit":
+        state = st.session_state.get("agent_state")
+        if state:
+            _render_agent_evidence(state)
+        logger = AuditLogger(ROOT)
+        audits = logger.recent("agent_run", limit=30)
+        if audits:
+            st.dataframe([
+                {"时间": item.get("timestamp"), "用户": item.get("user_id"), "问题": item.get("question"),
+                 "状态": item.get("status"), "Trace ID": item.get("trace_id"), "数据源": item.get("datasource")}
+                for item in audits
+            ], width="stretch", hide_index=True)
+        else:
+            st.info("尚无 Agent 审计记录。")
+    else:
+        render_quality()
+
+
 def main() -> None:
     settings = render_sidebar()
     st.title("零售经营分析 Data Agent")
-    st.caption("把业务问题转化为可解释、可审计、可复用的经营分析结果")
-    overview, agent_tab, ask, alerts, report, quality = st.tabs(
-        ["经营总览", "Agent", "自然语言问数", "预警与归因", "智能报告", "质量评测"])
-    with overview:
-        render_overview(settings)
-    with agent_tab:
+    st.caption("Business First, Evidence On Demand")
+    workspace, assistant, governance = st.tabs(["经营工作台", "AI 分析助手", "治理后台"])
+    with workspace:
+        render_business_workspace(settings)
+    with assistant:
         render_agent()
-    with ask:
-        render_ask()
-    with alerts:
-        render_alerts(settings)
-    with report:
-        render_report(settings)
-    with quality:
-        render_quality()
+    with governance:
+        render_governance()
 
 
 if __name__ == "__main__":

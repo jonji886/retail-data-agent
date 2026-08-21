@@ -12,6 +12,7 @@
 
 - [核心场景：华东区域销售额为何下降？](#hero)
 - [项目状态与核心证据](#evidence)
+- [企业交付场景](#solution-case)
 - [架构：理解与执行分离](#architecture)
 - [关键架构取舍](#decisions)
 - [评测与失败案例](#evaluation)
@@ -66,7 +67,7 @@ LLM / 规则理解：查询计划（`intent`、指标、维度、筛选、时间
 | 确定性回归 | 35 个 Golden 用例，35/35 通过 |
 | 真实 LLM 端到端评测 | Supabase PostgreSQL 上 34/35 通过；详见[评测](#evaluation) |
 | 治理边界 | RBAC + 数据范围、语义层、只读 SQL 守卫、追踪 + 审计 |
-| 公网部署 | Render + Supabase PostgreSQL + OpenRouter（低流量作品集演示） |
+| 公网部署 | Render + Supabase PostgreSQL + DeepSeek（OpenRouter 可选 fallback；低流量作品集演示） |
 | CI | [![CI](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml)；静态检查、单测、确定性回归、一致性检查与冒烟测试 |
 
 <details>
@@ -76,18 +77,29 @@ LLM / 规则理解：查询计划（`intent`、指标、维度、筛选、时间
 Status: MVP
 Version: v1.0.0
 Last verified: 2026-08-21
+Primary LLM Provider: DeepSeek
 
 Golden cases: 35
 Evaluation cases: 35
 Demo scenarios: 4
-Web tabs: 6
-Unit test files: 18
-Unit tests: 112
+Web tabs: 3
+Unit test files: 19
+Unit tests: 119
 ```
 
 </details>
 
 > `python3 scripts/verify_project_consistency.py` 会将以上状态与配置、报告和 Web 页面自动核对，避免文档数字漂移。
+
+<a id="solution-case"></a>
+
+## 企业交付场景
+
+本项目不仅展示 Agent 实现，还模拟完整企业 AI 交付过程：
+
+业务现状 → Pain Point → PoC → 系统集成 → 权限治理 → 验收 → Production Boundary
+
+👉 [查看 Solution / Delivery Case](docs/solution-delivery-case.md)
 
 <a id="architecture"></a>
 
@@ -123,7 +135,7 @@ DataSourceBase ◀─────┘
 | 权限边界 | [策略模块](app/tools/permission.py) 在 SQL 前执行 RBAC + 数据范围注入；越权不调用业务工具 |
 | SQL 安全 | [ReadOnlySQLRunner](app/tools/sql_runner.py) 仅允许单条 SELECT，拦截写操作、外部访问与危险路径，限制行数/资源 |
 | 数据源抽象 | [`DataSourceBase`](app/data_sources/base.py) + [DuckDB](app/data_sources/duckdb.py) + [PostgreSQL/Supabase](app/data_sources/postgresql.py) |
-| LLM 可靠性 | [OpenRouter 客户端](app/llm/openrouter_client.py)：固定评测模型、有限重试、可选 DeepSeek 跨服务商故障切换、确定性回退 |
+| LLM 可靠性 | [Provider 客户端](app/llm/openrouter_client.py)：DeepSeek 主 Provider、有限重试、可选 OpenRouter fallback、确定性回退 |
 | 可观测与审计 | [追踪状态](app/agent/state.py) 记录逐节点状态/耗时；[审计](app/quality/audit.py) 记录问题、计划、工具、结果与状态 |
 | 质量门禁 | [35 个 Golden 用例](configs/evaluation/golden_questions.json)、[评测脚本](scripts/run_evaluation.py)、[一致性校验](scripts/verify_project_consistency.py) 和 CI |
 | API 与演示边界 | [FastAPI](app/api.py) `/api/v1/query`、`/health`、`/ready` 与 [Streamlit](app/web_app.py) 共用应用服务；演示额度在 LLM 调用前生效 |
@@ -171,7 +183,7 @@ DataSourceBase ◀─────┘
 
 ### 真实 LLM 端到端评测
 
-运行于 2026-08-21，报告：[`reports/llm_evaluation_report.json`](reports/llm_evaluation_report.json)。该评测以固定的 `EVAL_LLM_MODEL=google/gemma-4-26b-a4b-it:free` 发起，并在 `DATA_SOURCE=postgresql` 下执行完整链路。
+运行于 2026-08-21，报告：[`reports/llm_evaluation_report.json`](reports/llm_evaluation_report.json)。新的评测默认以 DeepSeek 固定模型发起，并在 `DATA_SOURCE=postgresql` 下执行完整链路；仓库中的历史报告保留其生成时的 Provider 记录。
 
 | 指标 | 真实结果 |
 | --- | --- |
@@ -185,7 +197,7 @@ DataSourceBase ◀─────┘
 | 服务商故障切换 | 53 次调用；29 / 35 个用例（82.9%） |
 | 耗时 / Token | 总计 461.5 秒 / 43,951 Token |
 
-本次 OpenRouter 主模型请求受 `RateLimitError` 影响，成功调用均记录为 DeepSeek 服务商故障切换；因此上表是**真实端到端链路结果**，不应解读为 OpenRouter 主模型单独的准确率。完整报告保留了每个用例、实际服务商、故障切换与失败原因。
+历史报告中的 OpenRouter 主模型请求曾受 `RateLimitError` 影响，成功调用均记录为 DeepSeek 服务商故障切换；因此上表是**历史真实端到端链路结果**，不应解读为当前 DeepSeek 主模型的准确率。重新运行评测后，报告会分别记录 `primary_provider`、`actual_provider` 和 fallback。
 
 ```bash
 EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
@@ -208,7 +220,7 @@ EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
 Render 免费 Web 服务
   ↓
 Streamlit / FastAPI → 应用服务
-  ↓                  ↘ OpenRouter（LLM 理解 / 表达）
+  ↓                  ↘ DeepSeek（LLM 理解 / 表达）
 Supabase PostgreSQL
 ```
 
@@ -247,7 +259,7 @@ python3 scripts/run_evaluation.py              # DuckDB 确定性回归
 python3 scripts/verify_project_consistency.py
 python3 scripts/smoke_query.py
 
-# Supabase 真实 LLM 端到端评测（需 DATA_SOURCE=postgresql、DATABASE_URL、OPENROUTER_API_KEY）
+# Supabase 真实 LLM 端到端评测（需 DATA_SOURCE=postgresql、DATABASE_URL、DEEPSEEK_API_KEY）
 EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
 ```
 
@@ -258,7 +270,7 @@ EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
 - 当前只支持 DuckDB 与 PostgreSQL/Supabase；不宣传未实现的 MySQL、ClickHouse 等数据源。
 - 有意不引入 Multi-Agent、MCP、RAG、Vector DB、Kafka、Kubernetes、微服务或复杂监控平台；它们不服务于当前 MVP 的受控分析目标。
 - 归因结果是数据贡献，不自动证明业务因果；管理者应结合促销、库存、客流等外部事实复核。
-- 决策支持页面已实现结论、KPI、贡献图表、核查建议和证据抽屉；贡献因素点击下钻、自动执行后续追问与跨图表联动尚未实现，详见 [decision-support-ui.md](docs/decision-support-ui.md)。
+- AI 分析助手已支持推荐追问按钮自动执行；贡献因素点击下钻与跨图表联动仍未实现，详见 [decision-support-ui.md](docs/decision-support-ui.md)。
 - Render 免费方案仅适合演示/低流量验证，不提供高可用、持久化审计或分布式配额。
 
 <a id="documentation"></a>
@@ -266,6 +278,7 @@ EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
 ## 文档索引
 
 - [SPEC.md](SPEC.md)：问题、MVP 范围与验收标准
+- [docs/solution-delivery-case.md](docs/solution-delivery-case.md)：模拟企业 Solution / Delivery Case
 - [docs/architecture.md](docs/architecture.md)：架构、安全与运行边界
 - [docs/evaluation.md](docs/evaluation.md)：Golden Dataset、指标口径与 LLM 评测
 - [docs/deploy-render.md](docs/deploy-render.md)：Render + Supabase 部署与限制
