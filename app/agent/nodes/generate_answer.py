@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from app.agent.state import AgentState
+from app.presentation.decision_support import build_attribution_summary
 
 
 def generate_answer(state: AgentState) -> AgentState:
@@ -127,6 +128,12 @@ def _fmt_rate(v: Any) -> str:
     return "%.2f%%" % (float(v) * 100)
 
 
+def _fmt_currency(v: Any) -> str:
+    if v is None:
+        return "N/A"
+    return "¥%s" % format(float(v), ",.2f")
+
+
 def _answer_metric_query(result: Dict[str, Any], question: str) -> str:
     display = result.get("metric_display_name", result.get("metric", ""))
     rows = result.get("rows", [])
@@ -177,17 +184,37 @@ def _answer_anomaly(result: Dict[str, Any], question: str) -> str:
 
 
 def _answer_attribution(result: Dict[str, Any], question: str) -> str:
-    parts = ["销售变化归因（%s → %s）：" % (
-        result.get("comparison_period", ""), result.get("current_period", ""))]
-    parts.append("范围：%s；总变化额：%s" % (result.get("scope", ""), _fmt(result.get("total_delta"))))
-    top_neg = result.get("top_negative", [])
+    summary = build_attribution_summary(result)
+    change_rate = summary.get("change_rate")
+    delta = summary.get("total_delta", 0.0)
+    direction = summary.get("direction", "变化")
+    if change_rate is None:
+        parts = ["结论：%s %s 销售额为 %s，较 %s %s %s。" % (
+            summary.get("scope", "当前范围"),
+            summary.get("current_period", ""),
+            _fmt_currency(summary.get("current_total")),
+            summary.get("comparison_period", ""),
+            direction,
+            _fmt_currency(abs(delta)),
+        )]
+    else:
+        parts = ["结论：%s %s 销售额为 %s，较 %s %s %s（%s）。" % (
+            summary.get("scope", "当前范围"),
+            summary.get("current_period", ""),
+            _fmt_currency(summary.get("current_total")),
+            summary.get("comparison_period", ""),
+            direction,
+            _fmt_currency(abs(delta)),
+            _fmt_rate(change_rate),
+        )]
+    top_neg = summary.get("top_negative", [])
     if top_neg:
-        parts.append("主要负向贡献因素：")
+        parts.append("主要下降贡献（数据贡献，不等同于已验证的业务因果）：")
         for c in top_neg[:5]:
-            parts.append("  %s（%s）：变化额 %s，贡献率 %s" % (
-                c.get("member", ""), c.get("dimension", ""),
-                _fmt(c.get("delta")), _fmt_rate(c.get("contribution_rate"))))
-    parts.append(result.get("limitations", "贡献率表示数据变化贡献，不等同于已验证的业务因果。"))
+            parts.append("  %s：下降 %s，贡献 %s" % (
+                c.get("member", ""), _fmt_currency(abs(c.get("delta", 0))),
+                _fmt_rate(c.get("contribution_rate"))))
+    parts.append(result.get("limitations", "建议结合订单数、客单价、客流、库存和促销数据进一步核查。"))
     return "\n".join(parts)
 
 

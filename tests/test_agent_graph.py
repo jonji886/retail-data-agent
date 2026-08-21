@@ -27,6 +27,9 @@ class AgentGraphTest(unittest.TestCase):
         self.assertEqual(result["current_period"], "2025-11")
         self.assertEqual(result["comparison_period"], "2025-10")
         self.assertLess(result["total_delta"], 0)
+        self.assertIn("结论：", state["answer"])
+        self.assertIn("¥1,371,235.35", state["answer"])
+        self.assertIn("-25.75%", state["answer"])
 
     def test_attribution_month_with_space_is_not_replaced_by_latest_month(self) -> None:
         state = run_agent("为什么华东区域 11 月销售额下降了？", ROOT)

@@ -219,7 +219,37 @@ LLM 调用记录：provider / model / latency / status / prompt_version（不记
 
 Tool 调用记录：tool_name / latency / status / error_type。
 
-## 10. 未来扩展
+## 10. 决策支持展示层（设计目标）
+
+Agent 的确定性结果与面向老板的页面展示是两个不同边界：前者负责计算、校验和审计，后者负责信息排序、可视化和后续行动入口。展示层不得重新计算指标，也不得把贡献结果升级为未经验证的业务因果。
+
+推荐的数据到页面流：
+
+```text
+Validated Result
+  ↓
+Business Summary（范围 / 期间 / KPI / 变化方向）
+  ↓
+Driver View（区域 / 门店 / 品类贡献表与图表）
+  ↓
+Evidence Status（事实 / 待核查线索 / 已验证因果）
+  ↓
+Next Questions（基于权限范围的后续追问）
+  ↓
+Evidence Drawer（Plan / Permission / SQL / Trace / Audit）
+```
+
+展示层的关键约束：
+
+- 首屏优先展示业务结论，不要求用户理解 Intent、Skill 或 SQL；
+- 贡献率标注为数据变化贡献，只有外部业务证据存在时才能陈述因果；
+- 所有数字必须来源于已校验结果，并能追溯到指标口径和 SQL；
+- 技术细节默认折叠，但权限拒绝、异常和失败状态必须显式可见；
+- 下钻和后续追问继续沿用 RBAC + Data Scope，不得因可视化扩大权限。
+
+当前 Streamlit MVP 已实现第一版展示层：结论、KPI、贡献表与横向柱状图、核查建议以及默认折叠的依据区。展示模型位于 `app/presentation/decision_support.py`，不重新计算指标；贡献因素点击下钻、追问按钮自动执行和跨图表联动仍未实现。产品验收要求与示例见 `docs/decision-support-ui.md`。
+
+## 11. 未来扩展
 
 - DataSource Adapter（PostgreSQL / MySQL / Warehouse）
 - Durable Checkpointer（Redis / PostgreSQL）

@@ -19,6 +19,11 @@ from app.analytics.anomaly import SalesAnomalyDetector
 from app.analytics.attribution import SalesAttributor
 from app.quality.audit import AuditLogger
 from app.quality.evaluation import run_golden_v2
+from app.presentation.decision_support import (
+    build_attribution_summary,
+    build_attribution_table,
+    build_follow_up_questions,
+)
 from app.reporting.weekly_report import RetailReportBuilder
 
 
@@ -193,6 +198,82 @@ def render_report(settings: Dict[str, str]) -> None:
         st.markdown(st.session_state["report"])
 
 
+def _render_attribution_business_view(result: Dict[str, Any]) -> None:
+    """以结论优先的方式展示归因结果，技术细节由调用方单独折叠。"""
+    summary = build_attribution_summary(result)
+    current_period = summary["current_period"]
+    comparison_period = summary["comparison_period"]
+    scope = summary["scope"]
+    direction = summary["direction"]
+    delta = summary["total_delta"]
+    change_rate = summary["change_rate"]
+
+    st.markdown("### 经营结论")
+    if change_rate is None:
+        st.info("%s %s 销售额为 %s，较 %s 变化 %s。" % (
+            scope, current_period, money(summary["current_total"]), comparison_period, money(delta)
+        ))
+    else:
+        st.info("%s %s 销售额为 %s，较 %s%s %s，变化 %s。" % (
+            scope,
+            current_period,
+            money(summary["current_total"]),
+            comparison_period,
+            direction,
+            money(abs(delta)),
+            percent(change_rate),
+        ))
+
+    cols = st.columns(4)
+    cols[0].metric("本期销售额", money(summary["current_total"]))
+    cols[1].metric("对比销售额", money(summary["comparison_total"]))
+    cols[2].metric("变化金额", money(delta))
+    cols[3].metric("变化比例", percent(change_rate))
+
+    top_negative = summary["top_negative"]
+    if not top_negative:
+        st.success("当前没有可拆解的主要下降贡献因素。")
+        return
+
+    st.markdown("### 主要下降贡献")
+    chart_rows = [
+        {"因素": item.get("member", ""), "下降金额": abs(float(item.get("delta", 0)))}
+        for item in top_negative[:5]
+    ]
+    st.bar_chart(chart_rows, x="因素", y="下降金额", horizontal=True, height=280)
+
+    table = build_attribution_table(summary)
+    st.dataframe([
+        {
+            "成员": item["成员"],
+            "维度": item["维度"],
+            "当前值": money(item["当前值"]),
+            "对比值": money(item["对比值"]),
+            "变化额": money(item["变化额"]),
+            "下降贡献": percent(item["下降贡献"]),
+        }
+        for item in table
+    ], width="stretch", hide_index=True)
+
+    top_members = "、".join(item.get("member", "") for item in top_negative[:2])
+    if summary["top_two_contribution"]:
+        st.info("主要下降来自%s；前两项合计贡献 %s。" % (
+            top_members, percent(summary["top_two_contribution"])
+        ))
+
+    st.markdown("### 建议核查")
+    st.caption("以下是基于当前数据结构的核查线索，不是已验证的业务因果。")
+    st.markdown(
+        "- 核查下降门店的订单数、客流和客单价；\n"
+        "- 核查下降门店的重点品类、库存和促销变化；\n"
+        "- 核查渠道变化或数据采集异常。"
+    )
+
+    st.markdown("### 推荐继续追问")
+    for question in build_follow_up_questions(summary):
+        st.markdown("- %s" % question)
+
+
 def render_agent() -> None:
     st.subheader("Agent")
     st.caption("输入经营问题，Agent 自动识别意图并编排 Skill 与 Tool 执行。")
@@ -231,44 +312,63 @@ def render_agent() -> None:
         answer = state.get("answer", "")
         result = state.get("result") or {}
 
-        # 执行过程展示
-        st.markdown("### 执行过程")
-        steps = []
-        if intent:
-            steps.append(("Intent", intent, "✓" if intent != "unsupported" else "✗"))
-        if perm:
-            steps.append(("Permission", perm, "✓" if perm == "allow" else "✗"))
-        if skill:
-            steps.append(("Skill", skill, "✓"))
-        for tc in state.get("tool_calls", []):
-            steps.append(("Tool", tc.get("tool", ""), "✓" if tc.get("status") == "success" else "✗"))
-        if not error_type:
-            steps.append(("Validation", "passed", "✓"))
         if error_type:
-            steps.append(("Result", error_type, "✗"))
+            st.error(answer or "分析失败，请检查问题范围或稍后重试。")
         elif answer:
-            steps.append(("Answer", "generated", "✓"))
-        for label, value, mark in steps:
-            st.write("%s **%s**：`%s`" % (mark, label, value))
+            st.success("分析完成")
 
-        # 回答
-        if answer:
-            st.markdown("### 回答")
+        # 业务结论优先；归因结果使用结构化展示，避免把多个因素挤在一段文字中。
+        if intent == "attribution_analysis" and isinstance(result, dict) and result:
+            _render_attribution_business_view(result)
+        elif answer:
+            st.markdown("### 结论")
             st.info(answer)
+
+        # 执行过程默认折叠，作为分析依据保留。
+        with st.expander("查看分析依据（技术详情）", expanded=False):
+            st.markdown("#### 执行过程")
+            steps = []
+            if intent:
+                steps.append(("Intent", intent, "✓" if intent != "unsupported" else "✗"))
+            if perm:
+                steps.append(("Permission", perm, "✓" if perm == "allow" else "✗"))
+            if skill:
+                steps.append(("Skill", skill, "✓"))
+            for tc in state.get("tool_calls", []):
+                steps.append(("Tool", tc.get("tool", ""), "✓" if tc.get("status") == "success" else "✗"))
+            if not error_type:
+                steps.append(("Validation", "passed", "✓"))
+            if error_type:
+                steps.append(("Result", error_type, "✗"))
+            elif answer:
+                steps.append(("Answer", "generated", "✓"))
+            for label, value, mark in steps:
+                st.write("%s **%s**：`%s`" % (mark, label, value))
+
+            trace_events = state.get("trace_events", [])
+            if trace_events:
+                st.write("Trace 事件：")
+                st.dataframe([
+                    {"节点": e.get("node"), "状态": e.get("status", ""),
+                     "延迟(ms)": e.get("latency_ms", ""), "trace_id": e.get("trace_id", "")}
+                    for e in trace_events
+                ], width="stretch", hide_index=True)
+            st.caption("request_id: %s | trace_id: %s" % (
+                state.get("request_id", ""), state.get("trace_id", "")))
+
+            for tr in state.get("tool_results", []):
+                data = tr.get("data") or {}
+                if isinstance(data, dict) and data.get("sql"):
+                    st.code(data["sql"], language="sql")
+                if isinstance(data, dict) and data.get("comparison_sql"):
+                    st.code(data["comparison_sql"], language="sql")
+            if result.get("metric_definition"):
+                st.write("指标口径：", result["metric_definition"])
 
         # 结果数据
         if result and isinstance(result, dict) and result.get("rows"):
             st.markdown("### 结果数据")
             st.dataframe(result["rows"], width="stretch", hide_index=True)
-
-        # 归因贡献
-        if result and result.get("top_negative"):
-            st.markdown("### 主要负向贡献因素")
-            st.dataframe([
-                {"成员": c.get("member"), "变化额": money(c.get("delta", 0)), "贡献率": percent(c.get("contribution_rate"))}
-                for c in result["top_negative"]
-            ], width="stretch", hide_index=True)
-            st.caption(result.get("limitations", ""))
 
         # 异常
         if result and result.get("anomalies"):
@@ -285,27 +385,6 @@ def render_agent() -> None:
             st.download_button("下载 Markdown", result["markdown"],
                                file_name="%s-%s.md" % (result.get("period", "report"), result.get("scope", "all")))
             st.markdown(result["markdown"])
-
-        # SQL 与口径
-        with st.expander("查看 SQL、指标口径与 Trace"):
-            for tr in state.get("tool_results", []):
-                data = tr.get("data") or {}
-                if isinstance(data, dict) and data.get("sql"):
-                    st.code(data["sql"], language="sql")
-                if isinstance(data, dict) and data.get("comparison_sql"):
-                    st.code(data["comparison_sql"], language="sql")
-            if result.get("metric_definition"):
-                st.write("指标口径：", result["metric_definition"])
-            trace_events = state.get("trace_events", [])
-            if trace_events:
-                st.write("Trace 事件：")
-                st.dataframe([
-                    {"节点": e.get("node"), "状态": e.get("status", ""),
-                     "延迟(ms)": e.get("latency_ms", ""), "trace_id": e.get("trace_id", "")}
-                    for e in trace_events
-                ], width="stretch", hide_index=True)
-            st.caption("request_id: %s | trace_id: %s" % (
-                state.get("request_id", ""), state.get("trace_id", "")))
 
     st.markdown("### 推荐问题")
     for item in examples:
