@@ -53,10 +53,10 @@ def _detect_intent(question: str, engine: NaturalLanguageQueryEngine) -> str:
 def _resolve_month_from_question(question: str, latest: Optional[date]) -> str:
     """从问题中提取 YYYY-MM，默认使用 latest_data_date 所在月。"""
     import re
-    m = re.search(r"(20\d{2})年\s*(\d{1,2})月", question)
+    m = re.search(r"(20\d{2})年\s*(\d{1,2})\s*月", question)
     if m:
         return "%04d-%02d" % (int(m.group(1)), int(m.group(2)))
-    m = re.search(r"(?<!\d)(\d{1,2})月", question)
+    m = re.search(r"(?<!\d)(\d{1,2})\s*月", question)
     if m and latest:
         return "%04d-%02d" % (latest.year, int(m.group(1)))
     if latest:

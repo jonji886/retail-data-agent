@@ -337,10 +337,10 @@ def render_quality() -> None:
     ], width="stretch", hide_index=True)
     st.markdown("### Golden Dataset")
     st.dataframe([
-        {"用例": item.case_id, "问题": item.question, "类型": item.category,
-         "结果": "PASS" if item.passed else "FAIL",
-         "执行": "Y" if item.executable else "N",
-         "返回行数": item.row_count, "错误": "; ".join(item.errors)}
+        {"用例": item.get("case_id"), "问题": item.get("question"), "类型": item.get("category"),
+         "结果": "PASS" if item.get("passed") else "FAIL",
+         "执行": "Y" if item.get("executable") else "N",
+         "返回行数": item.get("row_count", 0), "错误": "; ".join(item.get("errors") or [])}
         for item in results
     ], width="stretch", hide_index=True)
 

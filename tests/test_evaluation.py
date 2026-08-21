@@ -16,6 +16,15 @@ class EvaluationTest(unittest.TestCase):
         self.assertGreater(report["passed"], 0)
         self.assertIn("overall_pass_rate", report)
         self.assertIn("plan_accuracy", report)
+
+    def test_golden_v2_results_are_serialized_mappings(self) -> None:
+        """Web 展示层使用 run_golden_v2 的 JSON-compatible 结果。"""
+        report = run_golden_v2(ROOT)
+        self.assertTrue(report["results"])
+        result = report["results"][0]
+        self.assertIsInstance(result, dict)
+        self.assertIn("case_id", result)
+        self.assertIsInstance(result.get("errors"), list)
         self.assertIn("executable_success_rate", report)
         self.assertGreater(report["executable_cases"], 0)
         # 执行成功率分母 = executable 用例，而非全部用例

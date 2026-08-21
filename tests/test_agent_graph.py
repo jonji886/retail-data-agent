@@ -24,6 +24,15 @@ class AgentGraphTest(unittest.TestCase):
         self.assertEqual(state["intent"], "attribution_analysis")
         self.assertEqual(state["current_skill"], "attribution_analysis")
         result = state["result"]
+        self.assertEqual(result["current_period"], "2025-11")
+        self.assertEqual(result["comparison_period"], "2025-10")
+        self.assertLess(result["total_delta"], 0)
+
+    def test_attribution_month_with_space_is_not_replaced_by_latest_month(self) -> None:
+        state = run_agent("为什么华东区域 11 月销售额下降了？", ROOT)
+        result = state["result"]
+        self.assertEqual(result["current_period"], "2025-11")
+        self.assertEqual(result["comparison_period"], "2025-10")
         self.assertLess(result["total_delta"], 0)
 
     def test_unsupported_intent_rejected(self) -> None:
