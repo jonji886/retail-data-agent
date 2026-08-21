@@ -61,6 +61,17 @@ class DuckDBCapabilityLockdownTest(unittest.TestCase):
         finally:
             connection.close()
 
+    def test_multiple_locked_readonly_connections_can_coexist(self) -> None:
+        first = open_readonly_connection(DB)
+        try:
+            second = open_readonly_connection(DB)
+            try:
+                self.assertEqual(second.execute("SELECT 1 AS value").fetchall(), [(1,)])
+            finally:
+                second.close()
+        finally:
+            first.close()
+
     def test_result_limit_is_enforced(self) -> None:
         runner = ReadOnlySQLRunner(DB, SQLExecutionPolicy(max_result_rows=2))
         with self.assertRaises(SQLResourceLimitError) as raised:

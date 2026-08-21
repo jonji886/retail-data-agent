@@ -70,7 +70,7 @@ def open_readonly_connection(database_path: Path,
     """创建锁定能力的 DuckDB 只读连接。
 
     ``enable_external_access=false`` 是关键安全边界；其余配置关闭扩展自动
-    加载/安装、限制资源，并在最后锁定，防止后续 SQL 重新打开配置。
+    加载/安装、限制资源，并在连接创建时锁定，防止后续 SQL 重新打开配置。
     """
     selected = policy or SQLExecutionPolicy.from_env()
     connection = duckdb.connect(
@@ -85,14 +85,9 @@ def open_readonly_connection(database_path: Path,
             "enable_external_file_cache": "false",
             "memory_limit": selected.memory_limit,
             "threads": str(selected.threads),
+            "lock_configuration": "true",
         },
     )
-    try:
-        # 必须在所有安全配置完成后锁定；lock_configuration 自身是最后一个设置。
-        connection.execute("SET lock_configuration = true")
-    except Exception:
-        connection.close()
-        raise
     return connection
 
 
