@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import duckdb
+from app.tools.sql_runner import open_readonly_connection
 
 
 @dataclass(frozen=True)
@@ -101,7 +101,7 @@ class SalesAttributor:
             ") GROUP BY 1, 2 ORDER BY 1, 2"
             % (dimension, scope_sql, dimension, scope_sql)
         )
-        connection = duckdb.connect(str(self.database_path), read_only=True)
+        connection = open_readonly_connection(self.database_path)
         try:
             rows = connection.execute(query, params).fetchall()
         finally:

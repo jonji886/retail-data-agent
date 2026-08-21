@@ -9,9 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import duckdb
-
 from app.agent.contracts import ToolResult
+from app.tools.sql_runner import open_readonly_connection
 
 
 class EntityResolver:
@@ -28,7 +27,7 @@ class EntityResolver:
         """根据文本模糊匹配门店，返回 {store_id, store_name, region_name, city_name}。"""
         if not text:
             return None
-        connection = duckdb.connect(str(self.database_path), read_only=True)
+        connection = open_readonly_connection(self.database_path)
         try:
             # 先精确匹配 store_name，再尝试 store_id，最后模糊 like
             rows: List[tuple] = connection.execute(

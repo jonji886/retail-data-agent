@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import duckdb
+from app.tools.sql_runner import open_readonly_connection
 
 
 @dataclass(frozen=True)
@@ -81,7 +81,7 @@ class SalesAnomalyDetector:
         if store_id:
             scope_sql += " AND store_id = ?"
             scope_params.append(store_id)
-        connection = duckdb.connect(str(self.database_path), read_only=True)
+        connection = open_readonly_connection(self.database_path)
         try:
             rows = connection.execute(
                 """

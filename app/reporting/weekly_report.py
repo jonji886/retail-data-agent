@@ -8,11 +8,10 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-import duckdb
-
 from app.analytics.anomaly import Anomaly, SalesAnomalyDetector
 from app.analytics.attribution import AttributionResult, SalesAttributor
 from app.llm.deepseek_client import DeepSeekClient
+from app.tools.sql_runner import open_readonly_connection
 
 
 def _month_range(month: str) -> Tuple[date, date]:
@@ -143,7 +142,7 @@ class RetailReportBuilder:
             ") GROUP BY 1 ORDER BY 1"
             % (scope_sql, scope_sql)
         )
-        connection = duckdb.connect(str(self.database_path), read_only=True)
+        connection = open_readonly_connection(self.database_path)
         try:
             rows = connection.execute(query, params).fetchall()
         finally:
@@ -186,7 +185,7 @@ class RetailReportBuilder:
             "FROM v_sales_enriched WHERE sale_date BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)%s "
             "GROUP BY 1 ORDER BY 1" % scope_sql
         )
-        connection = duckdb.connect(str(self.database_path), read_only=True)
+        connection = open_readonly_connection(self.database_path)
         try:
             rows = connection.execute(query, params).fetchall()
         finally:
