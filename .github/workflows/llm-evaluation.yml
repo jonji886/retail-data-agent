@@ -1,4 +1,4 @@
-name: Real LLM Evaluation
+name: Real LLM Evaluation (OpenRouter + DeepSeek failover)
 
 on:
   workflow_dispatch:
@@ -8,10 +8,12 @@ permissions:
 
 jobs:
   llm-evaluation:
-    name: DeepSeek E2E Evaluation
+    name: OpenRouter E2E Evaluation with DeepSeek failover
     runs-on: ubuntu-latest
     env:
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_LLM_MODEL: ${{ secrets.EVAL_LLM_MODEL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,9 +34,12 @@ jobs:
 
       - name: Validate required secret
         run: |
-          if [ -z "${DEEPSEEK_API_KEY}" ]; then
-            echo "DEEPSEEK_API_KEY secret is required for real LLM evaluation."
+          if [ -z "${OPENROUTER_API_KEY}" ] || [ -z "${EVAL_LLM_MODEL}" ]; then
+            echo "OPENROUTER_API_KEY and EVAL_LLM_MODEL are required for real LLM evaluation."
             exit 1
+          fi
+          if [ -z "${DEEPSEEK_API_KEY}" ]; then
+            echo "DEEPSEEK_API_KEY is not set; evaluation will use deterministic fallback if OpenRouter fails."
           fi
 
       - name: Run real LLM evaluation

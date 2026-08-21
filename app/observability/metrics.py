@@ -30,7 +30,11 @@ class OperationalMetrics:
                 self._counters["permission_deny_count"] += 1
             if state.get("intent") == "unsupported":
                 self._counters["unsupported_count"] += 1
-            fallback_count = sum(1 for item in state.get("llm_calls", []) if item.get("status") == "fallback")
+            fallback_count = sum(1 for item in state.get("llm_calls", []) if (
+                item.get("status") == "fallback"
+                or item.get("fallback_used")
+                or item.get("provider_fallback_used")
+            ))
             self._counters["fallback_count"] += fallback_count
             for item in state.get("llm_calls", []):
                 if item.get("provider"):

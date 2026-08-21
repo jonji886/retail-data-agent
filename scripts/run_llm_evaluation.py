@@ -7,8 +7,11 @@
 无 API Key 或未配置固定评测模型时明确 skip，并删除可能残留的旧报告，避免误导：
 不要出现 "100% pass 但 0 LLM calls" 的无证据报告。
 
+真实 LLM E2E 使用已部署的 Supabase PostgreSQL 数据源，确保查询计划、权限、
+语义层和受控 SQL 在公网近生产数据源上一起验证；确定性回归仍固定使用 DuckDB。
+
 报告至少包含：model / cases / passed / plan_accuracy / llm_calls /
-fallback_count / fallback_rate，且按用例预期行为判定 PASS。
+fallback_count / fallback_case_count / fallback_rate，且按用例预期行为判定 PASS。
 """
 
 from __future__ import annotations
@@ -24,7 +27,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.agent.graph import run_agent
-from app.data_sources.duckdb import DuckDBDataSource
+from app.config import DataSourceConfig
+from app.data_sources.base import DataSourceBase
+from app.data_sources.factory import create_data_source
 from app.llm.openrouter_client import OpenRouterConfig, load_env_file
 from app.quality.evaluation import _load_cases
 
@@ -42,8 +47,12 @@ def _count_success_calls(entries: List[Dict[str, Any]]) -> int:
 
 
 def _count_fallbacks(entries: List[Dict[str, Any]]) -> int:
-    """触发确定性 fallback 的次数（LLM 不可用或输出非法）。"""
-    return sum(1 for e in entries if e.get("status") == "fallback")
+    """统计跨 Provider 或确定性 fallback 的次数。"""
+    return sum(1 for e in entries if (
+        e.get("status") == "fallback"
+        or e.get("fallback_used")
+        or e.get("provider_fallback_used")
+    ))
 
 
 def _check_case(state: Dict[str, Any], case: Dict[str, Any]) -> Tuple[bool, List[str]]:
@@ -126,6 +135,21 @@ def _delete_stale_report() -> None:
         print(f"已删除过期 LLM 报告（避免 '0 LLM calls / 100% pass' 误导）: {REPORT_PATH}")
 
 
+def _create_evaluation_source() -> DataSourceBase:
+    """创建真实 LLM E2E 的 Supabase PostgreSQL 数据源。
+
+    LLM E2E 的目的之一是验证公网近生产链路，因此不能在 DATA_SOURCE=duckdb
+    时悄悄降级。确定性 Golden Regression 才使用 DuckDB 作为离线基线。
+    """
+    config = DataSourceConfig.from_env(ROOT)
+    if config.kind != "postgresql":
+        raise RuntimeError(
+            "LLM E2E 评测要求 DATA_SOURCE=postgresql（Supabase）；"
+            "确定性回归请运行 python3 scripts/run_evaluation.py"
+        )
+    return create_data_source(ROOT, config)
+
+
 def main() -> int:
     load_env_file(ROOT / ".env")
     if not OpenRouterConfig.is_configured(ROOT, mode="evaluation"):
@@ -137,12 +161,20 @@ def main() -> int:
     config = OpenRouterConfig.from_env(ROOT, mode="evaluation")
     model = config.model
     cases = _load_cases(ROOT)
+    try:
+        evaluation_source = _create_evaluation_source()
+        if not evaluation_source.health_check():
+            raise RuntimeError("Supabase PostgreSQL 健康检查失败")
+    except Exception as exc:  # noqa: BLE001
+        _delete_stale_report()
+        print("SKIP: %s（不会生成 LLM 报告）。" % exc)
+        return 0
     print("Running LLM E2E evaluation on %d cases (model=%s)..." % (len(cases), model))
 
     results: List[Dict[str, Any]] = []
-    evaluation_source = DuckDBDataSource(ROOT / "data" / "retail.duckdb")
     total_llm_calls = 0
     total_fallbacks = 0
+    fallback_cases = 0
     total_latency = 0.0
     input_tokens = 0
     output_tokens = 0
@@ -158,7 +190,7 @@ def main() -> int:
             user_id=case.get("user_id", "user_hq"),
             role=case.get("role", "hq_manager"),
             data_scope=case.get("data_scope", {"scope": "all"}),
-            use_llm=True, data_source=evaluation_source,
+            use_llm=True, llm_mode="evaluation", data_source=evaluation_source,
         )
         latency = time.monotonic() - start
         total_latency += latency
@@ -168,6 +200,8 @@ def main() -> int:
         fallback = _count_fallbacks(entries)
         total_llm_calls += llm_calls
         total_fallbacks += fallback
+        if fallback:
+            fallback_cases += 1
         for entry in entries:
             input_tokens += int(entry.get("input_tokens") or 0)
             output_tokens += int(entry.get("output_tokens") or 0)
@@ -197,6 +231,16 @@ def main() -> int:
             "permission_decision": state.get("permission_decision"),
             "latency_ms": int(latency * 1000),
             "llm_calls": llm_calls, "fallback": fallback > 0,
+            "llm_providers": [entry.get("provider") for entry in entries if entry.get("provider")],
+            "fallback_events": [
+                {
+                    "provider": entry.get("provider"),
+                    "fallback_from": entry.get("fallback_from"),
+                    "fallback_reason": entry.get("fallback_reason"),
+                }
+                for entry in entries
+                if entry.get("fallback_used") or entry.get("provider_fallback_used")
+            ],
             "error_type": state.get("error_type"),
             "errors": case_errors,
         })
@@ -205,7 +249,7 @@ def main() -> int:
             llm_calls, fallback > 0, latency))
 
     passed = sum(1 for r in results if r["passed"])
-    fallback_rate = total_fallbacks / len(results) if results else 0
+    fallback_rate = fallback_cases / len(results) if results else 0
     print("\nLLM E2E Result: %d/%d passed" % (passed, len(results)))
     print("Model: %s" % model)
     print("Total LLM calls: %d" % total_llm_calls)
@@ -221,6 +265,7 @@ def main() -> int:
         "mode": "llm",
         "provider": config.provider,
         "model": model,
+        "data_source": "postgresql",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "evaluation_timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "note": "LLM-enabled evaluation：真实调用 LLM 构建 Query Plan；"
@@ -236,6 +281,7 @@ def main() -> int:
         "total_llm_calls": total_llm_calls,
         "llm_calls": total_llm_calls,
         "fallback_count": total_fallbacks,
+        "fallback_case_count": fallback_cases,
         "fallback_rate": fallback_rate,
         "total_latency_s": total_latency,
         "latency_ms": int(total_latency * 1000),

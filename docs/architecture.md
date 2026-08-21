@@ -63,7 +63,7 @@ FastAPI API ──┘                                  ↓
                                                    ↓
                               DataSourceBase → DuckDB / PostgreSQL
 
-LLM：Application Service → OpenRouter Provider → Demo Router / 固定 Evaluation Model
+LLM：Application Service → OpenRouter 主 Provider → DeepSeek 故障切换 → 确定性 fallback
 横切：Trace / Audit / Metrics / Quota / Retry / Fallback / Evaluation
 ```
 
@@ -178,11 +178,14 @@ PostgreSQL 由连接参数提供 statement timeout；DuckDB 当前提供资源�
 ### 两条链路
 
 - Deterministic Baseline：`scripts/run_evaluation.py`（无 API Key 可运行）
-- LLM E2E：`scripts/run_llm_evaluation.py`（通过 OpenRouter，需 API Key + 固定 `EVAL_LLM_MODEL`，无则 skip）
+- LLM E2E：`scripts/run_llm_evaluation.py`（通过 OpenRouter 固定 `EVAL_LLM_MODEL`，使用 Supabase PostgreSQL；可选 `DEEPSEEK_API_KEY` 故障切换；无 Supabase / OpenRouter Key / 固定模型则 skip）
 
-OpenRouter 通过 OpenAI-compatible Chat Completions 接口调用。`OpenRouterNLQEngine.parse()`
-在结构化输出异常时最多补请求一次，随后必须经过本地计划校验、相对时间策略、RBAC、
-语义层和只读 SQL 执行器；Key 缺失、网络/API 异常或计划非法时回退到确定性基线。
+OpenRouter 通过 OpenAI-compatible Chat Completions 接口调用。主 Provider 按
+`LLM_MAX_RETRIES` 有限重试仍超时或报错时，如果配置了 `DEEPSEEK_API_KEY`，客户端对
+同一请求最多切换一次 DeepSeek（默认 `https://api.deepseek.com`、`deepseek-chat`）。
+两个 Provider 都失败时，或结构化输出经最多一次补请求仍非法时，回退到确定性基线。
+无论由哪个 Provider 生成计划，都必须经过本地计划校验、相对时间策略、RBAC、语义层
+和只读 SQL 执行器；Provider failover 不会绕过这些边界。
 回答润色同样只能使用已校验结果，不承担指标计算或权限判断。
 
 ### Relative Time Policy
@@ -208,16 +211,17 @@ Demo Badcase（`bc_demo_001`）：
 
 真实 LLM Badcase（`bc_llm_001`）：
 - 问题：“过去3个月各区域销售额趋势”在真实报告中返回 24 行，Ground Truth 为 12 行；
-- 根因：LLM 返回的相对日期未经过确定性策略归一化；
-- 修复：统一时间策略覆盖相对时间的模型日期；
-- 回归用例：g016，纳入 Golden Dataset；下一次真实 LLM 全量评测需复核。
+- 根因：`trend_analysis_skill` 忽略已校验的 Query Plan 时间窗口，固定查询最近 6 个月；
+- 修复：优先使用 Query Plan 的 `start_date/end_date`，仅在开始时间缺失时回退到最近 6 个月；
+- 回归：`g016` 已有 Golden 覆盖；修复后真实 LLM + Supabase 查询返回 12 行并通过。
 
 ## 9. Observability / Trace
 
 每次 Agent Run 生成 `request_id` + `trace_id`，记录每个节点的：
 - node / start_at / end_at / latency_ms / status / error
 
-LLM 调用记录：provider / model / latency / retry_count / status / token usage / prompt_version（不记录 API Key）。
+LLM 调用记录：provider / model / latency / retry_count / status / token usage / prompt_version；
+跨 Provider 切换额外记录 `fallback_used`、`fallback_from`、`fallback_reason`（不记录 API Key）。
 
 Tool 调用记录：tool_name / latency / status / error_type。
 

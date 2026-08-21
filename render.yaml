@@ -23,6 +23,12 @@ services:
         sync: false
       - key: OPENROUTER_FALLBACK_MODELS
         sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_BASE_URL
+        value: https://api.deepseek.com
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
       - key: LLM_MODEL
         sync: false
       - key: EVAL_LLM_MODEL

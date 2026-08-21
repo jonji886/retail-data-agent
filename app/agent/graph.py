@@ -129,10 +129,13 @@ def run_agent(
     role: str = "hq_manager",
     data_scope: Optional[Dict[str, Any]] = None,
     use_llm: bool = False,
+    llm_mode: str = "demo",
     thread_id: str = "",
     data_source: Optional[DataSourceBase] = None,
 ) -> AgentState:
     """运行一次完整的 Agent 流程，返回最终 state。"""
+    if llm_mode not in {"demo", "evaluation"}:
+        raise ValueError("llm_mode 仅支持 demo 或 evaluation")
     root = root or Path(".")
     from app.agent.state import new_state
     state = new_state(question=question, user_id=user_id, role=role,
@@ -140,6 +143,7 @@ def run_agent(
     # 注入运行时上下文（非 TypedDict 字段，但 dict 允许）
     state["_root"] = str(root)  # type: ignore[typeddict-unknown-key]
     state["_use_llm"] = use_llm  # type: ignore[typeddict-unknown-key]
+    state["_llm_mode"] = llm_mode  # type: ignore[typeddict-unknown-key]
     owned_data_source = data_source is None
     selected_data_source = data_source or create_data_source(root)
     state["_data_source"] = selected_data_source  # type: ignore[typeddict-unknown-key]
@@ -149,6 +153,7 @@ def run_agent(
         final_state = app.invoke(state)
         final_state.pop("_root", None)  # type: ignore[misc]
         final_state.pop("_use_llm", None)  # type: ignore[misc]
+        final_state.pop("_llm_mode", None)  # type: ignore[misc]
         final_state.pop("_data_source", None)  # type: ignore[misc]
         return final_state
     finally:

@@ -45,6 +45,17 @@ class TrendAnalysisSkillTest(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertGreater(result["trend_points"], 0)
 
+    def test_respects_query_plan_time_range(self) -> None:
+        """趋势 Skill 不得把“过去 3 个月”扩大为默认 6 个月。"""
+        plan = QueryPlan(
+            intent="trend_analysis", metric="sales_amount",
+            dimensions=["region_name"], filters={},
+            start_date=date(2025, 10, 1), end_date=date(2025, 12, 31),
+        )
+        result = trend_analysis_skill(plan, {"root": ROOT, "authorized_filters": {}})
+        self.assertTrue(result["success"])
+        self.assertEqual(result["trend_points"], 12)
+
 
 class AnomalyAnalysisSkillTest(unittest.TestCase):
     def test_detects_east_anomaly(self) -> None:

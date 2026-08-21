@@ -1,10 +1,78 @@
-# Retail Data Agent — 企业经营分析 Agent MVP
+# Retail Data Agent — 企业经营分析智能体 MVP
 
-[![CI](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml)
+> **Retail Data Agent 是一个面向企业经营分析团队的 AI 数据助手：把自然语言问题转为有权限边界、统一指标口径和可追溯证据的分析结论。**
+>
+> LLM 负责理解与表达；权限、指标口径、SQL 构造与执行由确定性系统控制。
 
-> 将自然语言经营问题，转换为**受治理、可审计、可评测**的数据分析执行流程的 Agent MVP。
+**立即体验：** [在线演示](https://retail-data-agent.onrender.com) · [5 分钟体验](#demo) · [本地启动](#quick-start)
 
+适合希望快速获得经营结论、同时需要核验数据口径、权限范围与执行依据的经营分析团队。
+
+## 目录
+
+- [核心场景：华东区域销售额为何下降？](#hero)
+- [项目状态与核心证据](#evidence)
+- [架构：理解与执行分离](#architecture)
+- [关键架构取舍](#decisions)
+- [评测与失败案例](#evaluation)
+- [公网部署](#deployment)
+- [5 分钟体验路径](#demo)
+- [本地启动](#quick-start)
+- [能力边界](#limitations)
+- [详细文档](#documentation)
+
+![智能体主界面：先呈现经营结论，再按需展开分析依据](docs/assets/agent-demo.png)
+
+<a id="hero"></a>
+
+## 核心场景：华东区域 11 月销售额为何下降？
+
+对应 Golden 用例 `g018`，也是网页演示的默认问题。它展示的不是“ChatGPT + SQL”，而是一条可治理的经营分析工作流：
+
+```text
+业务问题
+  ↓
+LLM / 规则理解：查询计划（`intent`、指标、维度、筛选、时间范围）
+  ↓
+确定性策略：RBAC + 数据范围（允许、收窄范围或拒绝）
+  ↓
+归因技能：按门店 / 城市 / 品类拆分销售变化贡献
+  ↓
+语义层：从统一指标口径生成受控 SQL
+  ↓
+只读 SQL 守卫 + `DataSourceBase`：只读执行、资源限制
+  ↓
+已校验的数据证据 → 业务解释 → 追踪 / 审计
 ```
+
+### 面向经营者的输出
+
+当前 MVP 会优先回答“发生了什么、主要由什么数据贡献、下一步应核查什么”，而非把意图、SQL 或追踪记录当作主结论：
+
+- 首屏呈现范围、期间、核心指标、变化金额/比例和主要下降贡献；
+- 将**已验证的数据事实**、**待核查线索**与**未经验证的业务因果**明确区分；
+- 技术依据可展开复核：查询计划、权限决策、生成 SQL、结果与追踪记录；
+- 给出在当前权限范围内可继续追问的经营问题。
+
+这意味着“某门店/品类贡献了下降”是可验证的数据结论；促销、库存、客流等业务原因仍需要外部事实核查，系统不会把贡献关系伪装成因果结论。
+
+<a id="evidence"></a>
+
+## 项目状态与核心证据
+
+| 核心证据 | 当前事实 |
+| --- | --- |
+| 版本与体验 | v1.0.0；[可直接体验](https://retail-data-agent.onrender.com) |
+| 确定性回归 | 35 个 Golden 用例，35/35 通过 |
+| 真实 LLM 端到端评测 | Supabase PostgreSQL 上 34/35 通过；详见[评测](#evaluation) |
+| 治理边界 | RBAC + 数据范围、语义层、只读 SQL 守卫、追踪 + 审计 |
+| 公网部署 | Render + Supabase PostgreSQL + OpenRouter（低流量作品集演示） |
+| CI | [![CI](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml)；静态检查、单测、确定性回归、一致性检查与冒烟测试 |
+
+<details>
+<summary>自动校验的项目状态（测试规模、用例数与页面数量）</summary>
+
+```text
 Status: MVP
 Version: v1.0.0
 Last verified: 2026-08-21
@@ -14,369 +82,192 @@ Evaluation cases: 35
 Demo scenarios: 4
 Web tabs: 6
 Unit test files: 18
-Unit tests: 107
+Unit tests: 111
 ```
 
-> 上表为项目状态单一事实来源，由 `python3 scripts/verify_project_consistency.py` 自动校验，防止文档与代码漂移。
+</details>
 
-> 以下为真实运行截图（非 AI 生成 UI 图）。生成方式：启动 Web Demo 后运行
-> `python3 scripts/capture_demo_shots.py`（需 playwright），
-> 输出到 `docs/assets/`。
+> `python3 scripts/verify_project_consistency.py` 会将以上状态与配置、报告和 Web 页面自动核对，避免文档数字漂移。
 
-![Agent 主界面](docs/assets/agent-demo.png)
-![Trace / 执行链路](docs/assets/agent-trace.png)
-![质量评测](docs/assets/evaluation.png)
+<a id="architecture"></a>
 
----
-
-## 一句话定位
-
-**Retail Data Agent** 是一个面向企业经营分析场景的 Agent MVP：用户用自然语言提问（如"华东区域 11 月销售额为什么下降"），系统将其解析为结构化 Query Plan，经过 **权限校验 → 归因 Skill → 语义层 → 只读 SQL 执行 → 结果校验** 后返回业务回答，全程记录 Trace 与 Audit。
-
-核心设计理念：
-
-> **LLM 只负责"理解与表达"，不直接承担权限判断、业务口径和 SQL 执行等确定性职责。**
-> `LLM does not directly execute business-critical operations.`
-
----
-
-## Hero Scenario：华东区域 11 月销售额为什么下降？
-
-这是项目的主演示场景（对应 Golden Case `g018`，Web Demo Agent Tab 默认问题）。
+## 架构：理解与执行分离
 
 ```text
-业务问题
-   ↓
-意图识别 / Query Plan（intent=attribution_analysis）
-   ↓
-RBAC / Data Scope 权限校验（allow）
-   ↓
-Attribution Skill（按 store / city / category 拆分贡献）
-   ↓
-Semantic Layer（统一指标口径，生成受控 SQL）
-   ↓
-只读 SQL Tool（只允许 SELECT，禁止写操作）
-   ↓
-结果校验（非空、口径核对）
-   ↓
-业务归因回答（哪个门店/品类拖累最大）
-   ↓
-Trace / Audit（记录 intent、plan、权限、SQL、结果）
+用户自然语言
+  ↓
+LangGraph 编排（有状态、可路由、可追踪）
+  ↓
+查询计划 ── LLM 可选：理解 / 最终表达
+  ↓
+策略 / 权限 ────────┐
+技能                │ 确定性系统：权限、口径、范围、SQL、执行、审计
+语义层              │
+受治理工具          │
+  ↓                 │
+DataSourceBase ◀─────┘
+  ├── DuckDB：本地 / CI / 确定性回归
+  └── PostgreSQL：Supabase / 公网演示 / 真实 LLM 端到端评测
+  ↓
+追踪 + 审计 + 评测（横切链路）
 ```
 
-该场景可一键在 Web Demo 中复现，详见 [docs/demo-script.md](docs/demo-script.md)。
+`DataSourceBase` 让技能、语义层和智能体运行时不感知底层数据库。公网演示与真实 LLM 端到端评测使用 Supabase PostgreSQL；DuckDB 只保留为本地/CI 的固定种子回归基线。详见 [架构说明](docs/architecture.md)。
 
-### 老板视角的输出目标
+## 工程证据
 
-当前 Agent 已能给出可审计的销售变化贡献结果，但老板真正关心的是“发生了什么、为什么发生、接下来做什么”。面向经营管理者的页面目标是：
+| 企业交付关注点 | 已实现证据 |
+| --- | --- |
+| 有状态编排 | [LangGraph StateGraph](app/agent/graph.py)：`parse → policy → skill → validate → answer → audit`，含拒绝/错误分支 |
+| 业务语义 | [语义层指标目录](app/semantic_layer/catalog.py)，口径单一来源为 [`configs/metrics/metrics.json`](configs/metrics/metrics.json) |
+| 权限边界 | [策略模块](app/tools/permission.py) 在 SQL 前执行 RBAC + 数据范围注入；越权不调用业务工具 |
+| SQL 安全 | [ReadOnlySQLRunner](app/tools/sql_runner.py) 仅允许单条 SELECT，拦截写操作、外部访问与危险路径，限制行数/资源 |
+| 数据源抽象 | [`DataSourceBase`](app/data_sources/base.py) + [DuckDB](app/data_sources/duckdb.py) + [PostgreSQL/Supabase](app/data_sources/postgresql.py) |
+| LLM 可靠性 | [OpenRouter 客户端](app/llm/openrouter_client.py)：固定评测模型、有限重试、可选 DeepSeek 跨服务商故障切换、确定性回退 |
+| 可观测与审计 | [追踪状态](app/agent/state.py) 记录逐节点状态/耗时；[审计](app/quality/audit.py) 记录问题、计划、工具、结果与状态 |
+| 质量门禁 | [35 个 Golden 用例](configs/evaluation/golden_questions.json)、[评测脚本](scripts/run_evaluation.py)、[一致性校验](scripts/verify_project_consistency.py) 和 CI |
+| API 与演示边界 | [FastAPI](app/api.py) `/api/v1/query`、`/health`、`/ready` 与 [Streamlit](app/web_app.py) 共用应用服务；演示额度在 LLM 调用前生效 |
 
-- 先展示范围、期间、核心指标、变化金额和变化比例；
-- 用表格或图表展示主要区域 / 门店 / 品类的下降贡献；
-- 明确区分已验证数据事实、待核查线索和未经验证的业务因果；
-- 将 Intent、Skill、Permission、SQL、Trace 等技术细节放入可展开的分析依据区；
-- 提供可继续追问的经营问题和核查建议。
+<a id="decisions"></a>
 
-当前 MVP 已实现第一版决策支持视图：结论、KPI、主要下降贡献图表、核查建议和折叠的技术依据。贡献因素点击下钻和自动执行后续追问仍未实现，完整要求与差距记录在 [docs/decision-support-ui.md](docs/decision-support-ui.md)。
+## 三项架构取舍
 
----
-
-## 核心架构
+### 1. 为什么不直连自然语言转 SQL
 
 ```text
-User（角色 + 数据权限）
-  ↓
-Agent Runtime（LangGraph，有状态编排）
-  ↓
-Query Plan（intent / metric / filters / 时间范围）
-  ↓
-Policy（RBAC + Data Scope 校验）
-  ↓
-Skill（归因 / 异常 / 报告 / 指标查询）
-  ↓
-Semantic Layer（指标口径单一来源）
-  ↓
-Governed Tool（只读 SQL 执行器）
-  ↓
-Data Source（本地 DuckDB，虚拟零售数据）
+自然语言 → 查询计划 → 语义层 → 受治理工具 → SQL
 ```
 
-旁挂三条可观测 / 质量链路：**Trace、Audit、Evaluation**。
+而不是 `LLM → SQL`。查询计划是可校验的中间产物；指标定义来自语义层，数据范围由策略模块注入，SQL 仍要经过只读守卫。这样能将权限、口径、安全与审计从 Prompt 中移到可测试的确定性边界。详见 [ADR 001](docs/decisions/001-why-query-plan.md) 与 [ADR 002](docs/decisions/002-why-semantic-layer.md)。
 
-详细设计见 [docs/architecture.md](docs/architecture.md)。
+### 2. 为什么使用 LangGraph
 
----
+这里使用 LangGraph 的原因是显式状态、条件分支、守卫机制、重试边界与可追踪性，而不是框架本身。每个节点有明确职责和可断言的状态产物，因此权限拒绝、工具失败和正常结果都可被独立测试。
 
-## 三项关键设计决策
+### 3. 为什么不使用 Multi-Agent
 
-### 1. 为什么用 LangGraph（有状态编排图）
+当前是单一、受约束的经营分析工作流。多智能体会增加协调、延迟、成本、调试和可观测性复杂度，而没有对应的业务收益。因此 MVP 选择“单一编排工作流 + 确定性技能”；这是有意的架构边界，不是遗漏的功能。详见 [ADR 003](docs/decisions/003-why-not-multi-agent.md)。
 
-需要明确的节点边界（解析 / 权限 / 执行 / 校验 / 回答）、可测试的状态流转，以及为 Trace 与评测提供结构化的中间产物。使用 LangGraph 是因为它把 Agent 流程变成**可命名、可路由、可测试**的图，而不是把框架本身当作卖点。
+<a id="evaluation"></a>
 
-### 2. 为什么不做直连 Text-to-SQL
+## 评测：两条证据链，不能混为一谈
 
-```text
-Natural Language → Query Plan → Semantic Layer → Controlled SQL
-```
+> **确定性回归 ≠ 真实 LLM 准确率。** 前者验证确定性编排与执行链路的回归；后者真实调用固定模型，评估自然语言理解连同 Supabase 近生产执行链路。指标定义与分母见 [docs/evaluation.md](docs/evaluation.md)。
 
-而不是直接 `LLM → SQL`。这样保证：
+### 确定性回归
 
-- **指标一致性**：所有口径来自 `configs/metrics/metrics.json` 语义层，不随 Prompt 漂移；
-- **权限可控**：SQL 必须经过 RBAC / Data Scope 注入过滤，越权问题在计划层面拦截；
-- **可预测、可测试**：Query Plan 是中间产物，Golden Dataset 可以独立评测"计划正确性"。
+来源：[`reports/evaluation_report.json`](reports/evaluation_report.json)，运行命令：`python3 scripts/run_evaluation.py`。这是普通 PR 的 CI 阻断门禁，固定使用 DuckDB，离线可复现。
 
-### 3. 为什么不用 Multi-Agent
+| 指标 | 结果 |
+| --- | --- |
+| Golden 测试集 | 35 个用例：常规 / 表达 / 趋势 / 归因 / 异常 / 报告 / 边界 / 权限 / 安全 |
+| 总体通过率 | 100%（35/35） |
+| 计划准确率 | 100% |
+| 可执行用例成功率 | 100%（27/27；仅统计期望执行业务工具的用例） |
+| 结果准确率 | 100% |
+| 不支持请求拒绝率 | 100% |
+| 权限安全通过率 | 100% |
+| 安全防御率 | 100% |
 
-当前场景是一个受约束的数据分析执行流程，不存在多个高度自治角色协作的刚性需求。因此选择：
+### 真实 LLM 端到端评测
 
-```text
-single orchestrated graph（单一编排图）
-```
+运行于 2026-08-21，报告：[`reports/llm_evaluation_report.json`](reports/llm_evaluation_report.json)。该评测以固定的 `EVAL_LLM_MODEL=google/gemma-4-26b-a4b-it:free` 发起，并在 `DATA_SOURCE=postgresql` 下执行完整链路。
 
-而不是 `multiple autonomous agents`。原因：
+| 指标 | 真实结果 |
+| --- | --- |
+| 数据源 | Supabase PostgreSQL |
+| 测试集 | 35 个 Golden 用例 |
+| 通过数 | 34/35 |
+| 总体通过率 | 97.1% |
+| 计划准确率 | 100% |
+| 可执行用例成功率 | 96.3%（26 / 27） |
+| LLM 调用 | 53 次（均为成功调用） |
+| 服务商故障切换 | 53 次调用；29 / 35 个用例（82.9%） |
+| 耗时 / Token | 总计 461.5 秒 / 43,951 Token |
 
-- 更容易评测（状态图每个节点可断言）；
-- 更少非确定性（不依赖多 Agent 协商）；
-- 更低协调成本，更适合企业交付与回归。
-
----
-
-## Engineering Evidence
-
-| Enterprise Concern | Implementation |
-| ------------------ | -------------- |
-| Agent orchestration | LangGraph StateGraph |
-| Business semantics | Semantic Layer（`configs/metrics/metrics.json` 为单一口径来源） |
-| Tool governance | Skill + Tool 分层调用，按意图路由 |
-| Permission | RBAC（角色/用户）+ Data Scope（区域/门店数据权限） |
-| SQL safety | 应用层 SQL Guard + DuckDB capability lockdown / PostgreSQL SELECT-only + 结果行数限制 |
-| Data source | `DataSourceBase` + DuckDB（本地/CI）+ PostgreSQL（Supabase/公网近似生产） |
-| LLM gateway | OpenRouter Provider、Demo 免费 Router、Evaluation 固定模型、有限重试与 fallback |
-| Cost / quota | Demo session/IP/global daily quota；超限前不发起 LLM 请求 |
-| API boundary | FastAPI `/api/v1/query`、`/health`、`/ready`，与 Streamlit 共享 Application Service |
-| Observability | Trace（逐节点事件）+ Audit（JSONL 审计日志） |
-| Quality | Golden Dataset（35 用例，9 类场景，见 `docs/evaluation.md`） |
-| Regression | 自动化评测（Deterministic + LLM 两种模式） |
-
-所有能力均有对应代码、测试或报告证据，无超前宣传。
-
----
-
-## Evaluation（两条证据链分开）
-
-> `Deterministic Regression ≠ Real LLM Accuracy`。前者验证编排、权限、语义层和执行链路的可重复回归；后者使用真实模型评测自然语言理解，受模型、网络和 quota 影响，不能混合统计。指标口径与分母定义见 [docs/evaluation.md](docs/evaluation.md)。
-
-### Deterministic Regression
-
-> 来源：`reports/evaluation_report.json`；命令：`python3 scripts/run_evaluation.py`。该报告是普通 PR 的 CI merge gate。
-
-| Metric | Value |
-| ------ | ----- |
-| Golden Dataset | 35 cases（normal / expression / trend / attribution / anomaly / report / boundary / permission / security） |
-| Overall Pass Rate | 100%（35/35） |
-| Plan Accuracy | 100% |
-| Executable Success Rate | 100%（27/27，仅统计期望执行业务工具的用例） |
-| Result Accuracy | 100% |
-| Unsupported Reject Rate | 100% |
-| Permission Safety Pass Rate | 100% |
-| Security Defense Rate | 100% |
-
-### Real LLM E2E Evaluation
-
-当前工作区未生成新的真实 LLM 报告。运行该评测必须同时配置 `OPENROUTER_API_KEY` 和固定的具体模型 `EVAL_LLM_MODEL`；禁止使用 `openrouter/free`，避免动态 Router 破坏可重复性。
+本次 OpenRouter 主模型请求受 `RateLimitError` 影响，成功调用均记录为 DeepSeek 服务商故障切换；因此上表是**真实端到端链路结果**，不应解读为 OpenRouter 主模型单独的准确率。完整报告保留了每个用例、实际服务商、故障切换与失败原因。
 
 ```bash
-python3 scripts/run_llm_evaluation.py
+EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
 ```
 
-报告生成后会记录 provider、model、评测时间、case/pass、LLM calls、fallback、延迟、token 与 estimated cost；README 一致性校验会阻止报告数字与页面漂移。也可手动触发 [GitHub Actions workflow](https://github.com/jonji886/retail-data-agent/actions/workflows/llm-evaluation.yml)。
+该脚本会记录服务商、模型、`data_source=postgresql`、35 个用例的通过数、真实 LLM 调用、故障切换、延迟、Token 与估算成本。无 Supabase、API Key 或固定模型时会明确跳过，绝不输出“0 次调用 / 100% 通过”的误导报告。
 
-### Known / Resolved Badcases
+### 已知 / 已修复的失败案例
 
-| Badcase | Root cause | Fix / regression |
-| -------- | ---------- | ---------------- |
-| `bc_demo_001`：各区域营业额 | `sales_amount` 同义词缺少“营业额” | 更新语义层；`g009` 回归通过 |
-| `bc_llm_001`：过去3个月各区域销售额趋势 | LLM 日期未经过统一相对时间策略，报告出现 24 行而 Ground Truth 为 12 行 | 新增 relative-time policy，`g016` 纳入 Golden；真实 LLM 报告待复跑 |
+| 案例 | 期望 / 实际 | 根因 | 修复 / 回归 |
+| --- | --- | --- | --- |
+| `bc_demo_001`：各区域营业额 | 应识别 `sales_amount`；早期未识别“营业额”同义词 | 语义层同义词缺失 | 更新 [`metrics.json`](configs/metrics/metrics.json)；Golden `g009` 通过 |
+| `bc_llm_001`：过去 3 个月各区域销售额趋势 | Supabase LLM 端到端评测返回 24 行；期望 12 行 | [趋势技能](app/skills/trend_analysis.py) 忽略查询计划的时间窗口，固定查询最近 6 个月 | 改为使用已校验的 `start_date/end_date`；新增单测，修复后真实 LLM + Supabase 回归为 12 行、通过 |
 
-### CI Quality Gate
+<a id="deployment"></a>
 
-每次 Push / Pull Request 自动执行以下阻断门禁；任一步骤失败都会使 CI 失败：
+## 公网部署
 
 ```text
-Prepare DuckDB fixture
-  → ruff check .
-  → compileall
-  → unit tests
-  → deterministic Golden evaluation
-  → project consistency check
-  → smoke test
+Render 免费 Web 服务
+  ↓
+Streamlit / FastAPI → 应用服务
+  ↓                  ↘ OpenRouter（LLM 理解 / 表达）
+Supabase PostgreSQL
 ```
 
-真实 LLM Evaluation 不进入普通 PR CI，只能通过手动 workflow 运行，API Key 仅来自 GitHub Secret。
+该部署用于作品集演示与低流量验证，而非高可用生产服务。真实约束包括：Render Free 冷启动、资源有限、无高可用；业务数据由 Supabase 持久化，但 Render 本地 JSONL Audit/Badcase 文件在服务重启后可能丢失。完整配置、Supabase 初始化、环境变量、quota 与排障见 [部署说明](docs/deploy-render.md)。
 
----
+<a id="demo"></a>
 
-## 5-Minute Demo
+## 5 分钟体验
 
-1. 启动 Web Demo（见下方 Quick Start），打开 **Agent** Tab；
-2. 提问：**"为什么华东区域 11 月销售额下降了？"**；
-3. 先展示业务结论（变化金额、变化比例和主要下降贡献），再说明当前 Demo 的技术执行链路；
-4. 展开执行链路：Query Plan → Skill → SQL → Trace，并说明这些是分析依据而不是老板主结论；
-5. 切换为"门店经理 (user_store_01)"，提问华东区域数据，展示 **DENY**（权限边界）；
-6. 打开 **质量评测** Tab，展示 35 用例、分类型通过率与安全指标。
+1. **经营归因（2 分钟）**：在智能体页签询问“为什么华东区域 11 月销售额下降了？”。查看先呈现的变化与主要贡献，再展开查询计划 → 技能 → SQL → 追踪记录，确认每项结论有数据依据。
+2. **权限边界（1 分钟）**：切换为“门店经理（`user_store_01`）”，查询华东区域数据。系统返回 **DENY**，且追踪记录不含业务工具调用；再查询本人门店，确认范围被自动注入。
+3. **安全、审计与评测（2 分钟）**：输入“删除销售数据”或注入类请求，确认被拒绝；查看审计记录和“质量评测”页签的 35 用例分层指标。
 
-完整话术与节奏见 [docs/demo-script.md](docs/demo-script.md)（4 个场景，5～10 分钟）。
+完整演示话术与 4 个场景见 [docs/demo-script.md](docs/demo-script.md)。
 
----
+<a id="quick-start"></a>
 
-## Quick Start
-
-### 环境要求
-
-- Python 3.10+
-- 依赖见 `requirements.txt`
-
-### 安装与启动
+## 本地启动
 
 ```bash
-# 1. 创建虚拟环境并安装依赖
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# 2. 生成本地可复现数据（首次运行或数据文件不存在时）
+# 本地确定性基线：生成固定种子数据并启动演示
 python3 scripts/generate_data.py
 python3 scripts/init_db.py
-
-# 3.（可选）配置 OpenRouter LLM：复制 .env.example 为 .env 并填写 API Key
-cp .env.example .env
-# Demo 至少填写：LLM_PROVIDER=openrouter、OPENROUTER_API_KEY=你的 OpenRouter API Key、OPENROUTER_MODEL=具体模型
-# 可选：OPENROUTER_BASE_URL、OPENROUTER_FALLBACK_MODELS（逗号分隔）
-# 示例：OPENROUTER_FALLBACK_MODELS=provider/model-a,provider/model-b
-
-# 4. 启动 Web Demo（默认 DuckDB；公网部署可切换 PostgreSQL）
 streamlit run app/web_app.py
 ```
 
-### 常用命令
+常用验证命令：
 
 ```bash
-# 单元测试（测试文件/用例数量由 consistency check 校验）
-python3 -m unittest discover -s tests
-
-# 确定性评测（生成 reports/evaluation_report.json）
-python3 scripts/run_evaluation.py
-
-# LLM 增强评测（需要 OPENROUTER_API_KEY，会产生 OpenRouter 模型调用费用）
-python3 scripts/run_llm_evaluation.py
-
-# 项目一致性校验（README / 配置 / 报告 / Web Tabs）
+python3 -m unittest discover -s tests -v
+python3 scripts/run_evaluation.py              # DuckDB 确定性回归
 python3 scripts/verify_project_consistency.py
-
-# 语义层与只读查询 Smoke Test
 python3 scripts/smoke_query.py
 
-# PostgreSQL / Supabase 初始化（DATA_SOURCE=postgresql + DATABASE_URL）
-python3 scripts/init_postgres.py
-
-# API Boundary
-uvicorn app.api:app --host 0.0.0.0 --port 8000
-
-# 与 GitHub Actions 相同的本地质量门禁（真实 LLM 不在其中）
-ruff check .
-python3 -m compileall app
-
-# Docker 部署
-docker compose up --build
+# Supabase 真实 LLM 端到端评测（需 DATA_SOURCE=postgresql、DATABASE_URL、OPENROUTER_API_KEY）
+EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
 ```
 
-## Render Free 部署
+<a id="limitations"></a>
 
-当前 v1.0 Demo 使用 Render + Supabase PostgreSQL + OpenRouter。部署使用仓库内的 `Dockerfile` 和 `render.yaml`；本地/CI 仍保留 DuckDB 作为可复现基线。
+## 已知限制与非目标
 
-当前公网 Demo：**[https://retail-data-agent.onrender.com](https://retail-data-agent.onrender.com)**
+- 当前只支持 DuckDB 与 PostgreSQL/Supabase；不宣传未实现的 MySQL、ClickHouse 等数据源。
+- 有意不引入 Multi-Agent、MCP、RAG、Vector DB、Kafka、Kubernetes、微服务或复杂监控平台；它们不服务于当前 MVP 的受控分析目标。
+- 归因结果是数据贡献，不自动证明业务因果；管理者应结合促销、库存、客流等外部事实复核。
+- 决策支持页面已实现结论、KPI、贡献图表、核查建议和证据抽屉；贡献因素点击下钻、自动执行后续追问与跨图表联动尚未实现，详见 [decision-support-ui.md](docs/decision-support-ui.md)。
+- Render 免费方案仅适合演示/低流量验证，不提供高可用、持久化审计或分布式配额。
 
-该地址用于演示和低流量验证。Render Free 实例空闲后会休眠，首次访问可能需要等待几十秒；服务重启后本地 DuckDB 数据和审计日志不保证持久化。
-
-最小配置如下：
-
-```text
-Runtime: Docker
-Instance Type: Free
-PORT: 8501
-Health Check Path: /_stcore/health
-```
-
-### 在公网 Demo 启用 OpenRouter
-
-Render 已在 `render.yaml` 中声明 PostgreSQL、OpenRouter 和 Demo quota 配置，但数据库 URL、API Key 和模型 slug 必须在 Render 控制台手动填写，不能写入 Git：
-
-1. 打开 Render 的 `retail-data-agent` 服务，进入 **Settings → Environment**；
-2. 添加 `OPENROUTER_API_KEY`，值填写你的 OpenRouter API Key；
-3. 添加 `DATABASE_URL`，值填写 Supabase PostgreSQL 连接串；确认 `DATA_SOURCE=postgresql`；
-4. Demo 填写 `LLM_MODEL=openrouter/free`；只有真实评测才填写固定的 `EVAL_LLM_MODEL`；
-5. 保存后点击 **Manual Deploy → Deploy latest commit**；
-6. 打开公网 Demo，在 **Agent** 或 **自然语言问数** Tab 选择 OpenRouter。页面显示“OpenRouter 已配置”后才会启用对应选项。
-
-OpenRouter 模型调用费用由 OpenRouter 账户承担，不包含在 Render Free 中。模型只负责解析查询计划或组织文字，权限校验、指标口径、SQL 生成与执行仍由本地受控链路完成；调用失败时会回退到确定性结果。
-
-`OPENROUTER_FALLBACK_MODELS` 是可选的 OpenRouter 候选模型列表，使用逗号分隔，例如 `provider/model-a,provider/model-b`。主模型由 `OPENROUTER_MODEL`（或兼容配置 `LLM_MODEL`）指定；配置候选列表后，OpenRouter 可在主模型不可用时按顺序尝试候选模型。它与应用侧的 deterministic fallback 不同：前者仍属于模型调用，后者是在模型请求失败或输出不合规时直接使用确定性链路。`.env` 中只保留一行 `OPENROUTER_FALLBACK_MODELS`，不要重复配置。
-
-`openrouter/free` 是 OpenRouter 的免费路由，会动态选择免费模型；它只用于 Public Demo。Evaluation 必须固定具体模型。Demo 默认 session/IP/global quota 为 10/20/40，超限后不会继续调用 LLM。
-
-详细控制台配置、环境变量、验证步骤和免费版数据持久化限制见 [docs/deploy-render.md](docs/deploy-render.md)。Render Free 适合 Demo 和低流量验证；审计日志与 DuckDB 文件不保证跨重启持久化。
-
-### 项目结构
-
-```text
-app/
-  agent/        # LangGraph Runtime：parse → policy → skill → validate → answer
-  llm/          # LLM 客户端（OpenRouter），prompt 纳入版本控制
-  data_sources/ # DataSourceBase、DuckDB、PostgreSQL 与工厂
-  observability/# quota 与进程内 Operational Metrics
-  application.py# Streamlit / API 共享 Application Service
-  api.py        # FastAPI API Boundary
-  quality/      # Evaluation 2.0 + Audit 审计
-  skills/       # 归因 / 异常 / 报告 / 指标查询 Skill
-  tools/        # 语义层、只读 SQL 执行、权限、元数据
-  analytics/    # 归因与异常分析算法
-  reporting/    # 周报生成
-  presentation/ # 面向经营管理者的结果展示模型
-  web_app.py    # Streamlit Web Demo（6 个 Tab）
-configs/
-  metrics/      # 指标口径（语义层单一来源）
-  evaluation/   # Golden Dataset（35 用例）
-  users.json    # RBAC 角色与数据权限
-scripts/        # 评测、一致性校验、Smoke Test、Ground Truth 生成
-reports/        # evaluation_report.json / llm_evaluation_report.json
-tests/          # 18 个测试文件，107 个用例
-docs/           # architecture / evaluation / operations / decisions / deploy-render
-```
-
----
-
-## 能力边界
-
-本项目定位 **Enterprise-oriented MVP**，明确不做：
-
-- MySQL、ClickHouse 等未实现的数据源；
-- Multi-Agent、MCP、RAG、Vector DB、Kubernetes、微服务；
-- Prometheus/Grafana 等复杂监控平台与分布式限流；
-- 高可用、持久化审计和强一致的公网配额系统；当前部署仍是 Portfolio MVP。
-
-当前归因结果表示数据变化贡献，不自动证明促销、库存、客流或其他业务因果；管理者仍需结合业务事实复核。老板视角的页面信息层级、图表和行动建议要求见 [docs/decision-support-ui.md](docs/decision-support-ui.md)。
-
-这些是"下一阶段候选"，不是"已实现能力"。见 [SPEC.md](SPEC.md) 的 Non-goals 与 Future。
-
----
+<a id="documentation"></a>
 
 ## 文档索引
 
-- [SPEC.md](SPEC.md)：MVP Product Specification（问题、范围、验收标准）
-- [docs/architecture.md](docs/architecture.md)：架构与设计决策
-- [docs/evaluation.md](docs/evaluation.md)：评测目标、Golden Dataset、指标口径
-- [docs/operations.md](docs/operations.md)：故障检测、降级与运维检查
-- [docs/decisions/](docs/decisions/)：关键架构决策记录
-- [docs/demo-script.md](docs/demo-script.md)：面试演示脚本（5～10 分钟）
-- [docs/decision-support-ui.md](docs/decision-support-ui.md)：老板视角的经营决策视图设计目标
-- [docs/deploy-render.md](docs/deploy-render.md)：Render Free 部署说明与限制
-- [docs/README_GUIDELINES.md](docs/README_GUIDELINES.md)：README 编写规范
+- [SPEC.md](SPEC.md)：问题、MVP 范围与验收标准
+- [docs/architecture.md](docs/architecture.md)：架构、安全与运行边界
+- [docs/evaluation.md](docs/evaluation.md)：Golden Dataset、指标口径与 LLM 评测
+- [docs/deploy-render.md](docs/deploy-render.md)：Render + Supabase 部署与限制
+- [docs/operations.md](docs/operations.md)：故障、降级与运行检查
+- [docs/decisions/](docs/decisions/)：关键架构取舍记录

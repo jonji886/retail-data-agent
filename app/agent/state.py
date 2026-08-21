@@ -60,6 +60,7 @@ class AgentState(TypedDict, total=False):
     # 否则 LangGraph 编译后节点收不到这些键，导致 use_llm 静默失效）
     _root: str
     _use_llm: bool
+    _llm_mode: str
     _data_source: Any
 
 

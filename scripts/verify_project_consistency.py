@@ -223,7 +223,7 @@ def main() -> int:
     print("5) LLM evaluation report:")
     if not LLM_REPORT_PATH.exists():
         llm_section = _readme_section(
-            "### Real LLM E2E Evaluation", "### Known / Resolved Badcases"
+            "### 真实 LLM 端到端评测", "### 已知 / 已修复的失败案例"
         )
         if "未生成" not in llm_section:
             print("  [FAIL] LLM 报告不存在，但 README 未明确标记当前没有真实报告")
@@ -255,12 +255,12 @@ def main() -> int:
     # 6) README Evaluation 证据必须来自报告，而不是独立维护的数字。
     print("6) README Evaluation evidence:")
     deterministic_section = _readme_section(
-        "### Deterministic Regression", "### Real LLM E2E Evaluation"
+        "### 确定性回归", "### 真实 LLM 端到端评测"
     )
     if EVAL_REPORT_PATH.exists():
         deterministic = load_json(EVAL_REPORT_PATH)
-        overall_value = _readme_table_value(deterministic_section, "Overall Pass Rate")
-        executable_value = _readme_table_value(deterministic_section, "Executable Success Rate")
+        overall_value = _readme_table_value(deterministic_section, "总体通过率")
+        executable_value = _readme_table_value(deterministic_section, "可执行用例成功率")
         expected_overall_ratio = "%d/%d" % (
             deterministic.get("passed", 0), deterministic.get("total", 0)
         )
@@ -292,13 +292,13 @@ def main() -> int:
     if LLM_REPORT_PATH.exists():
         llm = load_json(LLM_REPORT_PATH)
         llm_section = _readme_section(
-            "### Real LLM E2E Evaluation", "### Known / Resolved Badcases"
+            "### 真实 LLM 端到端评测", "### 已知 / 已修复的失败案例"
         )
         expected_llm = "%d/%d" % (llm.get("passed", 0), llm.get("total", 0))
         expected_calls = str(llm.get("total_llm_calls"))
         if (
             expected_llm not in llm_section
-            or expected_calls not in _readme_table_value(llm_section, "LLM Calls")
+            or expected_calls not in _readme_table_value(llm_section, "LLM 调用")
         ):
             print("  [FAIL] README LLM 指标与真实报告不一致")
             errors.append("README LLM 指标漂移")

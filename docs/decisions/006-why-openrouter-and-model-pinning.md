@@ -14,12 +14,19 @@ OpenRouter 提供 OpenAI-compatible 网关和多模型选择，适合 Portfolio 
 
 ## Decision
 
-选择第三种。`LLM_MODEL` 控制 Demo，允许 `openrouter/free`；`EVAL_LLM_MODEL` 必须是具体固定模型。客户端统一处理 timeout、有限重试、usage 记录和确定性 fallback。
+选择第三种并补充跨 Provider 故障切换。`LLM_MODEL` 控制 Demo，允许 `openrouter/free`；
+`EVAL_LLM_MODEL` 必须是具体固定模型。OpenRouter 是主 Provider，客户端统一处理 timeout、
+有限重试、usage 记录；配置 `DEEPSEEK_API_KEY` 后，OpenRouter 仍失败时对同一请求最多
+切换一次 DeepSeek（默认 `deepseek-chat`），两个 Provider 都失败才使用确定性 fallback。
 
 ## Trade-offs
 
-固定模型可能更贵或不可用，需要手动更新；但评测报告可复现，故障可以按 provider、model、retry 和 fallback 分层分析。
+固定模型可能更贵或不可用，需要手动更新；DeepSeek fallback 会增加一次 Provider 成本和
+延迟，也可能造成不同模型的输出差异。但评测报告可以按 provider、model、retry、
+`fallback_used` 和最终 deterministic fallback 分层分析，避免把故障切换伪装成主模型准确率。
 
 ## Consequences
 
-API Key 只从环境变量读取，审计不记录凭证；模型失败不会绕过权限、语义层或只读 SQL 边界。
+OpenRouter / DeepSeek API Key 只从环境变量读取，审计不记录凭证；Provider 切换不会绕过
+权限、语义层或只读 SQL 边界。生产场景应同时配置两者并监控 `fallback_rate`；没有
+`DEEPSEEK_API_KEY` 时仍保持原有确定性 fallback 行为。

@@ -4,8 +4,8 @@
 
 | Failure | Detection | Behaviour | User response | Trace/Audit |
 |---|---|---|---|---|
-| OpenRouter timeout / HTTP error | 客户端异常与超时 | 最多重试 `LLM_MAX_RETRIES`（0～2），随后确定性回退 | 返回规则链路结果 | 记录 provider、model、retry_count、fallback |
-| 429 / model unavailable | HTTP 异常类型或请求失败 | 有限重试，失败后回退；不无限循环 | 提示使用确定性结果 | 记录 fallback reason |
+| OpenRouter timeout / HTTP error | 客户端异常与超时 | 最多重试 `LLM_MAX_RETRIES`（0～2）；仍失败且配置 `DEEPSEEK_API_KEY` 时，同一请求最多切换一次 DeepSeek；两个 Provider 都失败才确定性回退 | 优先返回 DeepSeek 结果，否则返回规则链路结果 | 记录实际 provider、model、`retry_count`、`fallback_used`、`fallback_from`、`fallback_reason` |
+| 429 / model unavailable | HTTP 异常类型或请求失败 | OpenRouter 有限重试后切换 DeepSeek；不无限循环；DeepSeek 失败后确定性回退 | 优先返回 DeepSeek 结果，否则提示使用确定性结果 | 记录 Provider failover 和最终 fallback reason |
 | invalid JSON / structured output | JSON 与计划白名单校验失败 | 最多一次补请求，仍失败则走确定性解析 | 正常返回或明确拒答 | 记录 `LLMPlanError` 类型 |
 | quota exceeded | session/IP/global 计数器 | 在调用 LLM 前停止请求 | 提示 Demo 额度已用尽 | `quota_exceeded`，不产生 LLM call |
 | PostgreSQL unavailable | `/ready` 或数据源健康检查失败 | API 快速失败；不执行 Skill | 提示数据源暂不可用 | 记录 `DATA_SOURCE_UNAVAILABLE` |

@@ -77,6 +77,9 @@ OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 LLM_MODEL=openrouter/free
 OPENROUTER_FALLBACK_MODELS=<optional-comma-separated-models>
 EVAL_LLM_MODEL=<fixed-model-only-for-manual-evaluation>
+DEEPSEEK_API_KEY=<optional-fallback-api-key>
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
 OPENROUTER_TIMEOUT_SECONDS=60
 OPENROUTER_MAX_TOKENS=1200
 LLM_MAX_RETRIES=1
@@ -88,9 +91,9 @@ OPENROUTER_HTTP_REFERER=https://retail-data-agent.onrender.com
 OPENROUTER_APP_TITLE=Retail Data Agent
 ```
 
-`DATABASE_URL`、`OPENROUTER_API_KEY` 和 `EVAL_LLM_MODEL` 不能写入仓库。`LLM_MODEL=openrouter/free` 只用于 Demo；真实评测必须填写固定具体模型。保存环境变量后需要执行一次 **Manual Deploy → Deploy latest commit**，新进程才会读取配置。页面中看到“OpenRouter 已配置”后，在 Agent / 自然语言问数 / 智能报告中选择 OpenRouter 即可发起调用。
+`DATABASE_URL`、`OPENROUTER_API_KEY`、`DEEPSEEK_API_KEY` 和 `EVAL_LLM_MODEL` 不能写入仓库。`LLM_MODEL=openrouter/free` 只用于 Demo；真实评测必须填写固定具体模型。保存环境变量后需要执行一次 **Manual Deploy → Deploy latest commit**，新进程才会读取配置。页面中看到“OpenRouter 已配置”后，在 Agent / 自然语言问数 / 智能报告中选择 OpenRouter 即可发起调用。
 
-OpenRouter 的模型调用费用由 OpenRouter 账户承担，Render Free 不包含模型调用额度。LLM 只生成结构化查询计划或文字表达，权限、指标口径、SQL 和计算仍由本地链路负责；请求失败时应用会回退到确定性结果，并在 Agent 的技术详情中标记 fallback。
+OpenRouter 的模型调用费用由 OpenRouter 账户承担，DeepSeek fallback 的费用由 DeepSeek 账户承担，Render Free 不包含任何模型调用额度。每次调用先走 OpenRouter；按 `LLM_MAX_RETRIES` 有限重试仍超时或报错时，如果配置了 `DEEPSEEK_API_KEY`，同一请求最多切换一次 DeepSeek；两个 Provider 都失败后才回退确定性结果。LLM 只生成结构化查询计划或文字表达，权限、指标口径、SQL 和计算仍由本地链路负责；Agent 技术详情会标记实际 provider 与 fallback reason。
 
 ## 4. 部署后验证
 
@@ -102,7 +105,7 @@ OpenRouter 的模型调用费用由 OpenRouter 账户承担，Render Free 不包
 4. 在“质量评测”Tab 查看确定性评测结果；
 5. 观察 Deploy Logs 是否出现 PostgreSQL 启动校验和 Streamlit 启动日志。
 
-建议首次部署时先完成 Supabase 初始化并关闭 LLM，确认容器、端口、PostgreSQL 和权限链路正常后，再配置 OpenRouter API Key。
+建议首次部署时先完成 Supabase 初始化并关闭 LLM，确认容器、端口、PostgreSQL 和权限链路正常后，再配置 OpenRouter API Key；随后补充 DeepSeek Key，并用故障注入或临时不可用模型验证 failover 记录。
 
 ## 5. 常见问题
 
@@ -116,7 +119,7 @@ OpenRouter 的模型调用费用由 OpenRouter 账户承担，Render Free 不包
 
 ### OpenRouter 模式失败
 
-检查 `LLM_PROVIDER=openrouter`、`OPENROUTER_API_KEY`、`LLM_MODEL` 是否配置，以及 OpenRouter API 是否可访问。Render 和本项目的免费部署不包含模型调用费用。
+检查 `LLM_PROVIDER=openrouter`、`OPENROUTER_API_KEY`、`LLM_MODEL` 是否配置，以及 OpenRouter API 是否可访问。若需要自动切换，确认 `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL` 和 `DEEPSEEK_MODEL` 已配置；查看 Trace 中的 `fallback_used`、`fallback_from` 和 `fallback_reason`。Render 和本项目的免费部署不包含模型调用费用。
 
 ### 如何初始化 Supabase
 

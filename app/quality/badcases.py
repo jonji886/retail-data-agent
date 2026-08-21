@@ -126,20 +126,20 @@ DEMO_BADCASE = {
 
 REAL_LLM_BADCASE = {
     "badcase_id": "bc_llm_001",
-    "event_id": "llm_evaluation_2026-08-19",
-    "timestamp": "2026-08-19T09:33:48Z",
+    "event_id": "llm_evaluation_2026-08-21",
+    "timestamp": "2026-08-21T10:04:44Z",
     "question": "过去3个月各区域销售额趋势",
-    "category": "relative_time",
-    "reason": "真实 LLM 评测 g016 返回 24 行，Ground Truth 期望 12 行",
+    "category": "trend_execution",
+    "reason": "Supabase 真实 LLM E2E 的 g016 返回 24 行，Ground Truth 期望 12 行",
     "expected": "按当前月及前两个月的 3 个完整自然月返回 12 个区域月度结果",
     "actual": "评测报告记录 row_count=24 expected=12",
-    "root_cause": "LLM 计划中的 start_date/end_date 未经过统一相对时间策略归一化，模型日期可多包含一个月",
-    "fix": "新增 deterministic relative-time policy；对过去/最近/近 N 个月统一按包含当前月的 N 个自然月解析，并在 LLM 计划校验时覆盖模型日期",
-    "fixed_version": "relative-time-policy",
+    "root_cause": "trend_analysis_skill 忽略已校验的 Query Plan start_date，固定查询最近 6 个月",
+    "fix": "Trend Skill 优先使用 Query Plan 的 start_date/end_date；只在开始时间缺失时才回退到最近 6 个月默认值",
+    "fixed_version": "unreleased",
     "regression_case_id": "g016",
     "status": "resolved",
-    "created_at": "2026-08-19T09:33:48Z",
-    "resolved_at": "2026-08-20T00:00:00Z",
+    "created_at": "2026-08-21T10:04:44Z",
+    "resolved_at": "2026-08-21T10:30:00Z",
 }
 
 

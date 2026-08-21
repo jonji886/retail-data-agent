@@ -91,6 +91,7 @@ def parse_request(state: AgentState) -> AgentState:
     data_source = state.get("_data_source")
     engine = NaturalLanguageQueryEngine(root, data_source=data_source)
     use_llm = state.get("_use_llm", False)  # type: ignore[assignment]
+    llm_mode = state.get("_llm_mode", "demo")  # type: ignore[assignment]
     metadata_tool = MetadataTool(root / "data" / "retail.duckdb", data_source=data_source)
     latest = metadata_tool.latest_date()
 
@@ -121,25 +122,30 @@ def parse_request(state: AgentState) -> AgentState:
             if use_llm:
                 from app.agent.llm_nlq import OpenRouterNLQEngine
                 try:
-                    llm_engine = OpenRouterNLQEngine(root, data_source=data_source)
+                    llm_engine = OpenRouterNLQEngine(root, data_source=data_source, mode=llm_mode)
                     parsed = llm_engine.parse(question)
                     llm_calls = list(state.get("llm_calls", []))
+                    metadata = dict(llm_engine.client.last_call_metadata)
                     llm_calls.append({
-                        "provider": "openrouter", "node": "parse_request",
-                        "status": "success", "model": llm_engine.config.model,
+                        "provider": metadata.get("provider", llm_engine.config.provider),
+                        "node": "parse_request",
+                        "status": "success", "model": metadata.get("model", llm_engine.config.model),
                         "prompt_version": "v1",
-                        **llm_engine.client.last_call_metadata,
+                        **metadata,
                     })
                     state = {**state, "llm_calls": llm_calls}  # type: ignore[assignment]
                 except Exception as exc:  # noqa: BLE001
                     # LLM 不可用，回退到确定性
                     parsed = engine.parse(question)
                     llm_calls = list(state.get("llm_calls", []))
+                    metadata = getattr(getattr(locals().get("llm_engine"), "client", None), "last_call_metadata", {})
                     llm_calls.append({
                         "provider": "openrouter", "node": "parse_request",
                         "status": "fallback", "model": getattr(getattr(locals().get("llm_engine"), "config", None), "model", "unknown"),
                         "fallback_model": "deterministic", "reason": type(exc).__name__,
-                        "retry_count": getattr(getattr(locals().get("llm_engine"), "client", None), "last_call_metadata", {}).get("retry_count", 0),
+                        "retry_count": metadata.get("retry_count", 0),
+                        "provider_fallback_used": metadata.get("fallback_used", metadata.get("fallback_attempted", False)),
+                        "fallback_provider": metadata.get("fallback_from") or metadata.get("fallback_provider"),
                     })
                     state = {**state, "llm_calls": llm_calls}  # type: ignore[assignment]
             else:

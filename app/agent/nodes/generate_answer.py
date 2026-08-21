@@ -22,6 +22,7 @@ def generate_answer(state: AgentState) -> AgentState:
     intent = state.get("intent", "")
     question = state.get("question", "")
     use_llm = state.get("_use_llm", False)  # type: ignore[assignment]
+    llm_mode = state.get("_llm_mode", "demo")  # type: ignore[assignment]
 
     events = list(state.get("trace_events", []))
 
@@ -33,28 +34,37 @@ def generate_answer(state: AgentState) -> AgentState:
 
     # 可选 LLM 润色：仅基于已提供的事实，不添加新数字
     if use_llm:
-        if not _llm_available(root):
+        if not _llm_available(root, llm_mode):
             llm_calls.append({
                 "provider": "openrouter", "node": "generate_answer",
-                "status": "fallback", "model": _configured_model(root),
+                "status": "fallback", "model": _configured_model(root, llm_mode),
                 "fallback_model": "deterministic", "reason": "provider_not_configured",
             })
         else:
             try:
-                llm_answer, metadata = _llm_summarize(root, intent, result, question, template_answer)
+                llm_answer, metadata = _llm_summarize(
+                    root, intent, result, question, template_answer, llm_mode
+                )
                 if llm_answer:
                     answer = llm_answer
                     llm_calls.append({
-                        "provider": "openrouter", "node": "generate_answer",
-                        "status": "success", "model": _configured_model(root),
+                        "provider": metadata.get("provider", "openrouter"),
+                        "node": "generate_answer",
+                        "status": "success", "model": metadata.get("model", _configured_model(root, llm_mode)),
                         "prompt_version": "v1",
                         **metadata,
                     })
             except Exception as exc:  # noqa: BLE001
+                metadata = getattr(exc, "llm_metadata", {})
                 llm_calls.append({
-                    "provider": "openrouter", "node": "generate_answer",
-                    "status": "fallback", "model": _configured_model(root),
+                    "provider": metadata.get("provider", "openrouter"),
+                    "node": "generate_answer",
+                    "status": "fallback", "model": metadata.get("model", _configured_model(root, llm_mode)),
                     "fallback_model": "deterministic", "reason": type(exc).__name__,
+                    "fallback_used": metadata.get("fallback_used", False),
+                    "fallback_attempted": metadata.get("fallback_attempted", False),
+                    "fallback_provider": metadata.get("fallback_from") or metadata.get("fallback_provider"),
+                    "fallback_reason": metadata.get("fallback_reason") or metadata.get("fallback_error_type"),
                 })
                 # LLM 失败时使用模板回答
 
@@ -68,24 +78,26 @@ def generate_answer(state: AgentState) -> AgentState:
     return {**state, "answer": answer, "trace_events": events, "llm_calls": llm_calls}
 
 
-def _llm_available(root: Path) -> bool:
+def _llm_available(root: Path, mode: str = "demo") -> bool:
     from app.llm.openrouter_client import OpenRouterConfig
-    return OpenRouterConfig.is_configured(root)
+    return OpenRouterConfig.is_configured(root, mode=mode)
 
 
-def _configured_model(root: Path) -> str:
-    from app.llm.openrouter_client import DEFAULT_MODEL, load_env_file
+def _configured_model(root: Path, mode: str = "demo") -> str:
+    from app.llm.openrouter_client import DEFAULT_MODEL, OpenRouterConfig, load_env_file
     import os
+    if mode == "evaluation":
+        return OpenRouterConfig.from_env(root, mode=mode).model
     load_env_file(root / ".env")
     return os.getenv("LLM_MODEL", "").strip() or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
 
 
 def _llm_summarize(root: Path, intent: str, result: Dict[str, Any],
-                   question: str, template: str) -> tuple[str, Dict[str, Any]]:
+                   question: str, template: str, mode: str = "demo") -> tuple[str, Dict[str, Any]]:
     """使用 OpenRouter 基于已提供的事实生成总结。"""
     from app.llm.openrouter_client import OpenRouterClient, OpenRouterConfig
     import json
-    client = OpenRouterClient(OpenRouterConfig.from_env(root))
+    client = OpenRouterClient(OpenRouterConfig.from_env(root, mode=mode))
     system_prompt = (
         "你是零售经营分析 Data Agent 的回答生成器。\n"
         "只能基于用户提供的已验证 JSON 事实生成中文总结，"
@@ -96,7 +108,14 @@ def _llm_summarize(root: Path, intent: str, result: Dict[str, Any],
     )
     facts = json.dumps({"intent": intent, "question": question, "result": _safe_result(result)},
                        ensure_ascii=False, default=str)
-    return client.complete_text(system_prompt, facts, max_tokens=600), client.last_call_metadata
+    try:
+        answer = client.complete_text(system_prompt, facts, max_tokens=600)
+    except Exception as exc:  # noqa: BLE001
+        # 将 Provider failover 的最终审计元数据带回节点，避免双 Provider
+        # 都失败时只看到一个笼统的 deterministic fallback。
+        setattr(exc, "llm_metadata", dict(client.last_call_metadata))
+        raise
+    return answer, client.last_call_metadata
 
 
 def _safe_result(result: Dict[str, Any]) -> Dict[str, Any]:

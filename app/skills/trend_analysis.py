@@ -17,10 +17,10 @@ def trend_analysis_skill(plan: QueryPlan, context: Dict[str, Any]) -> Dict[str, 
     authorized_filters = context.get("authorized_filters", dict(plan.filters))
     tool = MetricQueryTool(root)
 
-    # 默认取最近 6 个月趋势
+    # Query Plan 已由解析层校验并归一化相对时间；必须尊重其时间窗口。
+    # 只有未指定开始时间的调用才使用最近 6 个月这一默认值。
     end = plan.end_date or date(2025, 12, 31)
-    months = 6
-    start = _shift_month(end.replace(day=1), -(months - 1))
+    start = plan.start_date or _shift_month(end.replace(day=1), -5)
 
     result = tool.query(
         metric=plan.metric,

@@ -76,6 +76,14 @@ class LLMPlanValidationTest(unittest.TestCase):
 
 
 class OpenRouterConfigTest(unittest.TestCase):
+    def test_evaluation_engine_loads_pinned_evaluation_config(self) -> None:
+        config = Mock()
+        with patch("app.agent.llm_nlq.OpenRouterConfig.from_env", return_value=config) as load, \
+             patch("app.agent.llm_nlq.OpenRouterClient"):
+            engine = OpenRouterNLQEngine(Path("."), mode="evaluation")
+        load.assert_called_once_with(Path("."), mode="evaluation")
+        self.assertIs(engine.config, config)
+
     def test_is_configured_only_checks_key(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

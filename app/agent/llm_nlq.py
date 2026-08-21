@@ -19,10 +19,11 @@ class LLMPlanError(NLQError):
 
 
 class OpenRouterNLQEngine:
-    def __init__(self, root: Path, data_source: DataSourceBase | None = None) -> None:
+    def __init__(self, root: Path, data_source: DataSourceBase | None = None,
+                 mode: str = "demo") -> None:
         self.root = root
         self.deterministic = NaturalLanguageQueryEngine(root, data_source=data_source)
-        self.config = OpenRouterConfig.from_env(root)
+        self.config = OpenRouterConfig.from_env(root, mode=mode)
         self.client = OpenRouterClient(self.config)
 
     def parse(self, question: str) -> ParsedQuestion:

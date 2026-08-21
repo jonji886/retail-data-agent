@@ -113,4 +113,4 @@ A：数据是固定种子的虚拟数据；本地/CI 使用 DuckDB，公网近�
 A：本地/CI 仍使用 DuckDB 保持可复现性；作品集部署路径已支持 Supabase PostgreSQL。两者通过 `DataSourceBase` 复用同一语义层、权限和只读查询边界，避免把本地评测与公网运行环境混在一起。
 
 **Q：LLM 评测是怎么做的？**
-A：`run_llm_evaluation.py` 通过 OpenRouter 真实调用 `.env` / Render 中配置的模型，并记录 model / llm_calls / fallback_rate。没有 `OPENROUTER_API_KEY` 时明确 SKIP，不生成假报告。
+A：`run_llm_evaluation.py` 通过 OpenRouter 真实调用固定评测模型，并记录 provider / model / llm_calls / fallback_rate。配置 `DEEPSEEK_API_KEY` 后，OpenRouter 超时或报错会对同一请求最多切换一次 DeepSeek；两者都失败才走确定性 fallback。没有 OpenRouter Key 或固定 `EVAL_LLM_MODEL` 时明确 SKIP，不生成假报告。

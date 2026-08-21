@@ -79,6 +79,34 @@ class LLMRetryTest(unittest.TestCase):
         self.assertEqual(client.last_call_metadata["retry_count"], 1)
         self.assertEqual(call.call_args.kwargs["extra_body"], {"models": ["fallback/one", "fallback/two"]})
 
+    def test_openrouter_error_fails_over_to_deepseek(self) -> None:
+        config = OpenRouterConfig(
+            api_key="openrouter-test", max_retries=0,
+            deepseek_api_key="deepseek-test", deepseek_model="deepseek-chat",
+        )
+        client = OpenRouterClient(config)
+        response = Mock()
+        response.choices = [Mock(message=Mock(content='{"ok": true}'))]
+        response.usage = None
+        with patch.object(client._client.chat.completions, "create", side_effect=RuntimeError("timeout")):
+            with patch.object(client._deepseek_client.chat.completions, "create", return_value=response) as fallback_call:
+                self.assertEqual(client.complete_json("system", "user"), '{"ok": true}')
+        self.assertEqual(fallback_call.call_args.kwargs["model"], "deepseek-chat")
+        self.assertEqual(client.last_call_metadata["provider"], "deepseek")
+        self.assertTrue(client.last_call_metadata["fallback_used"])
+        self.assertEqual(client.last_call_metadata["fallback_from"], "openrouter")
+
+    def test_deepseek_configuration_is_loaded_without_exposing_key(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
+            "LLM_PROVIDER": "openrouter",
+            "OPENROUTER_API_KEY": "openrouter-test",
+            "DEEPSEEK_API_KEY": "deepseek-test",
+            "DEEPSEEK_MODEL": "deepseek-chat",
+        }, clear=True):
+            config = OpenRouterConfig.from_env(Path(directory))
+        self.assertEqual(config.deepseek_model, "deepseek-chat")
+        self.assertEqual(config.deepseek_api_key, "deepseek-test")
+
     def test_parses_openrouter_fallback_models(self) -> None:
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
             "LLM_PROVIDER": "openrouter",
