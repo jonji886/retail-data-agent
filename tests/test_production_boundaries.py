@@ -16,6 +16,7 @@ from app.config import DataSourceConfig
 from app.data_sources.postgresql import PostgreSQLDataSource
 from app.llm.openrouter_client import OpenRouterConfig, OpenRouterClient
 from app.observability.quota import DemoQuota, QuotaConfig
+from app.observability.runtime_logging import log_event, request_log_context
 
 
 ROOT = Path(".")
@@ -127,6 +128,26 @@ class LLMRetryTest(unittest.TestCase):
             self.assertFalse(OpenRouterConfig.is_configured(Path(directory), mode="evaluation"))
             with self.assertRaisesRegex(RuntimeError, "固定的具体模型"):
                 OpenRouterConfig.from_env(Path(directory), mode="evaluation")
+
+
+class RuntimeLoggingTest(unittest.TestCase):
+    def test_structured_log_keeps_trace_ids_and_redacts_sensitive_values(self) -> None:
+        with self.assertLogs("retail_data_agent.runtime", level="INFO") as captured:
+            with request_log_context(request_id="req_test", trace_id="trace_test", surface="test"):
+                log_event(
+                    "llm_provider_request",
+                    provider="openrouter",
+                    input_tokens=12,
+                    api_key="do-not-log",
+                    question="do-not-log",
+                )
+        rendered = "\n".join(captured.output)
+        self.assertIn('"event": "llm_provider_request"', rendered)
+        self.assertIn('"request_id": "req_test"', rendered)
+        self.assertIn('"trace_id": "trace_test"', rendered)
+        self.assertIn('"input_tokens": 12', rendered)
+        self.assertIn("[REDACTED]", rendered)
+        self.assertNotIn("do-not-log", rendered)
 
 
 class APITest(unittest.TestCase):

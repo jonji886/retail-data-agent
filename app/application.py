@@ -12,6 +12,7 @@ from app.data_sources.base import DataSourceBase
 from app.data_sources.factory import create_data_source
 from app.observability.metrics import GLOBAL_METRICS, OperationalMetrics
 from app.observability.quota import DemoQuota
+from app.observability.runtime_logging import log_event
 from app.quality.audit import AuditLogger
 
 
@@ -58,6 +59,14 @@ class AgentApplicationService:
                     error_message="Demo quota exceeded", trace_events=state["trace_events"],
                 )
                 self.metrics.record_request(state, int((time.monotonic() - started) * 1000))
+                log_event(
+                    "agent_request_rejected",
+                    request_id=state["request_id"],
+                    trace_id=state["trace_id"],
+                    surface="application_service",
+                    error_type="QUOTA_EXCEEDED",
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                )
                 return state
         try:
             state = run_agent(
@@ -81,6 +90,14 @@ class AgentApplicationService:
                 datasource=state["datasource"], trace_events=state["trace_events"],
             )
         self.metrics.record_request(state, int((time.monotonic() - started) * 1000))
+        log_event(
+            "application_request_completed",
+            request_id=state["request_id"],
+            trace_id=state["trace_id"],
+            surface="application_service",
+            error_type=state.get("error_type"),
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
         return state
 
     def ready(self) -> bool:

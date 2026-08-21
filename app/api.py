@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from pydantic import BaseModel, Field
 
 from app.application import AgentApplicationService
+from app.observability.runtime_logging import log_event
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,4 +64,14 @@ def query(payload: QueryRequest, request: Request) -> Dict[str, Any]:
         payload.question, user_id=payload.user_id, use_llm=payload.use_llm,
         session_id=payload.session_id or payload.user_id, client_ip=client_ip,
     )
-    return _response(state, started)
+    response = _response(state, started)
+    log_event(
+        "http_query_completed",
+        surface="api_query",
+        request_id=state.get("request_id"),
+        trace_id=state.get("trace_id"),
+        status=response["status"],
+        error_type=response.get("error_type"),
+        latency_ms=response["latency_ms"],
+    )
+    return response

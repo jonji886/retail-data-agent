@@ -14,6 +14,7 @@ START → parse_request
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -34,6 +35,7 @@ from app.agent.router import (
 from app.agent.state import AgentState
 from app.data_sources.base import DataSourceBase
 from app.data_sources.factory import create_data_source
+from app.observability.runtime_logging import log_event, request_log_context
 
 
 # ---------------------------------------------------------------------------
@@ -149,13 +151,43 @@ def run_agent(
     state["_data_source"] = selected_data_source  # type: ignore[typeddict-unknown-key]
     state["datasource"] = selected_data_source.dialect
     app = build_graph()
+    started = time.monotonic()
     try:
-        final_state = app.invoke(state)
-        final_state.pop("_root", None)  # type: ignore[misc]
-        final_state.pop("_use_llm", None)  # type: ignore[misc]
-        final_state.pop("_llm_mode", None)  # type: ignore[misc]
-        final_state.pop("_data_source", None)  # type: ignore[misc]
-        return final_state
+        with request_log_context(
+            request_id=state["request_id"],
+            trace_id=state["trace_id"],
+            surface="agent_runtime",
+            datasource=selected_data_source.dialect,
+            use_llm=use_llm,
+            llm_mode=llm_mode,
+        ):
+            log_event("agent_request_started", question_length=len(question))
+            final_state = app.invoke(state)
+            log_event(
+                "agent_request_completed",
+                intent=final_state.get("intent", ""),
+                permission_decision=final_state.get("permission_decision", ""),
+                error_type=final_state.get("error_type"),
+                tool_call_count=len(final_state.get("tool_calls", [])),
+                llm_call_count=len(final_state.get("llm_calls", [])),
+                trace_event_count=len(final_state.get("trace_events", [])),
+                latency_ms=int((time.monotonic() - started) * 1000),
+            )
+            final_state.pop("_root", None)  # type: ignore[misc]
+            final_state.pop("_use_llm", None)  # type: ignore[misc]
+            final_state.pop("_llm_mode", None)  # type: ignore[misc]
+            final_state.pop("_data_source", None)  # type: ignore[misc]
+            return final_state
+    except Exception as exc:
+        log_event(
+            "agent_request_failed",
+            request_id=state["request_id"],
+            trace_id=state["trace_id"],
+            surface="agent_runtime",
+            error_type=type(exc).__name__,
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
+        raise
     finally:
         if owned_data_source:
             selected_data_source.close()

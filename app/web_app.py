@@ -17,12 +17,13 @@ sys.path.insert(0, str(ROOT))
 from app.application import AgentApplicationService
 from app.data_sources.factory import create_data_source
 from app.agent.llm_nlq import OpenRouterNLQEngine
-from app.agent.nlq import NLQError, NaturalLanguageQueryEngine
+from app.agent.nlq import NaturalLanguageQueryEngine
 from app.llm.openrouter_client import DEFAULT_MODEL, OpenRouterConfig, load_env_file
 from app.analytics.anomaly import SalesAnomalyDetector
 from app.analytics.attribution import SalesAttributor
 from app.quality.audit import AuditLogger
 from app.quality.evaluation import run_golden_v2
+from app.observability.runtime_logging import log_event, request_log_context
 from app.presentation.decision_support import (
     build_attribution_summary,
     build_attribution_table,
@@ -131,18 +132,46 @@ def render_ask() -> None:
     mode = st.radio("解析模式", modes, horizontal=True)
     logger = AuditLogger(ROOT)
     if st.button("开始分析", type="primary"):
+        diagnostic: Dict[str, Any] = {}
+        request_started_at = time.monotonic()
         try:
-            if mode == openrouter_mode:
-                answer = OpenRouterNLQEngine(ROOT, data_source=app_data_source()).answer(question)
-            else:
-                answer = deterministic_engine().answer(question)
+            with request_log_context(
+                surface="natural_language_query",
+                use_llm=mode == openrouter_mode,
+            ) as log_context:
+                diagnostic = log_context
+                data_source = app_data_source()
+                log_event(
+                    "natural_language_request_started",
+                    question_length=len(question),
+                    datasource=data_source.dialect,
+                )
+                if mode == openrouter_mode:
+                    answer = OpenRouterNLQEngine(ROOT, data_source=data_source).answer(question)
+                else:
+                    answer = deterministic_engine().answer(question)
+                log_event(
+                    "natural_language_request_completed",
+                    row_count=len(answer.rows),
+                    latency_ms=int((time.monotonic() - request_started_at) * 1000),
+                )
             audit_id = logger.record_query(question, mode, "success", answer.parsed, answer.sql, len(answer.rows))
             st.session_state["last_answer"] = answer
             st.session_state["last_audit_id"] = audit_id
             st.session_state["last_question"] = question
-        except (NLQError, RuntimeError, ValueError) as exc:
+            st.session_state["last_request_id"] = diagnostic.get("request_id", "")
+            st.session_state["last_trace_id"] = diagnostic.get("trace_id", "")
+        except Exception as exc:  # noqa: BLE001
+            log_event(
+                "natural_language_request_failed",
+                request_id=diagnostic.get("request_id"),
+                trace_id=diagnostic.get("trace_id"),
+                surface="natural_language_query",
+                error_type=type(exc).__name__,
+                latency_ms=int((time.monotonic() - request_started_at) * 1000),
+            )
             logger.record_query(question, mode, "failed", error=str(exc))
-            st.error("暂时无法回答：%s" % exc)
+            st.error("暂时无法回答：%s\n诊断编号：%s" % (exc, diagnostic.get("trace_id") or diagnostic.get("request_id", "N/A")))
 
     answer = st.session_state.get("last_answer")
     if answer:
@@ -159,6 +188,10 @@ def render_ask() -> None:
                 st.code(answer.comparison_sql, language="sql")
             st.write("指标口径：", parsed.metric.description)
             st.caption("审计 ID：%s" % st.session_state.get("last_audit_id", "N/A"))
+            st.caption("request_id: %s | trace_id: %s" % (
+                st.session_state.get("last_request_id", "N/A"),
+                st.session_state.get("last_trace_id", "N/A"),
+            ))
         with st.form("badcase_form"):
             st.markdown("#### 质量反馈")
             reason = st.text_input("如果回答有问题，请说明原因", placeholder="例如：指标口径不符合预期")
@@ -210,24 +243,49 @@ def render_report(settings: Dict[str, str]) -> None:
         st.caption("确定性报告只使用本地数据，通常几秒内完成。")
     if st.button("生成报告", type="primary"):
         started_at = time.monotonic()
+        diagnostic: Dict[str, Any] = {}
         try:
-            with st.status("正在生成报告，请稍候…", expanded=True) as status:
-                status.write("1/2 正在汇总 KPI、趋势、预警和归因数据…")
-                context = report_builder().build_context(settings["month"], selected_region(settings), settings["dimension"])
-                if use_llm:
-                    status.write("2/2 正在调用 OpenRouter 组织报告文字…")
-                    from app.llm.openrouter_client import OpenRouterClient, OpenRouterConfig
-                    report = RetailReportBuilder.to_openrouter_markdown(context, OpenRouterClient(OpenRouterConfig.from_env(ROOT)))
-                else:
-                    status.write("2/2 正在生成确定性 Markdown 报告…")
-                    report = RetailReportBuilder.to_markdown(context)
-                st.session_state["report"] = report
-                elapsed = time.monotonic() - started_at
-                status.update(label="报告生成完成（%.1f 秒）" % elapsed, state="complete", expanded=False)
+            with request_log_context(
+                surface="report_generation",
+                use_llm=use_llm,
+            ) as log_context:
+                diagnostic = log_context
+                data_source = app_data_source()
+                log_event("report_request_started", datasource=data_source.dialect)
+                with st.status("正在生成报告，请稍候…", expanded=True) as status:
+                    status.write("1/2 正在汇总 KPI、趋势、预警和归因数据…")
+                    context = report_builder().build_context(settings["month"], selected_region(settings), settings["dimension"])
+                    if use_llm:
+                        status.write("2/2 正在调用 OpenRouter 组织报告文字…")
+                        from app.llm.openrouter_client import OpenRouterClient, OpenRouterConfig
+                        report = RetailReportBuilder.to_openrouter_markdown(context, OpenRouterClient(OpenRouterConfig.from_env(ROOT)))
+                    else:
+                        status.write("2/2 正在生成确定性 Markdown 报告…")
+                        report = RetailReportBuilder.to_markdown(context)
+                    st.session_state["report"] = report
+                    st.session_state["report_request_id"] = diagnostic.get("request_id", "")
+                    st.session_state["report_trace_id"] = diagnostic.get("trace_id", "")
+                    elapsed = time.monotonic() - started_at
+                    log_event("report_request_completed", latency_ms=int(elapsed * 1000))
+                    status.update(label="报告生成完成（%.1f 秒）" % elapsed, state="complete", expanded=False)
         except Exception as exc:
             elapsed = time.monotonic() - started_at
-            st.error("报告生成失败（耗时 %.1f 秒）。请检查网络、OpenRouter API Key 或稍后重试。错误类型：%s" % (elapsed, type(exc).__name__))
+            log_event(
+                "report_request_failed",
+                request_id=diagnostic.get("request_id"),
+                trace_id=diagnostic.get("trace_id"),
+                surface="report_generation",
+                error_type=type(exc).__name__,
+                latency_ms=int(elapsed * 1000),
+            )
+            st.error("报告生成失败（耗时 %.1f 秒）。请检查网络、OpenRouter API Key 或稍后重试。错误类型：%s\n诊断编号：%s" % (
+                elapsed, type(exc).__name__, diagnostic.get("trace_id") or diagnostic.get("request_id", "N/A")
+            ))
     if st.session_state.get("report"):
+        st.caption("request_id: %s | trace_id: %s" % (
+            st.session_state.get("report_request_id", "N/A"),
+            st.session_state.get("report_trace_id", "N/A"),
+        ))
         st.download_button("下载 Markdown", st.session_state["report"], file_name="%s-%s.md" % (settings["month"], settings["region"]))
         st.markdown(st.session_state["report"])
 
@@ -340,12 +398,20 @@ def render_agent() -> None:
             st.session_state["session_id"] = "st_" + uuid.uuid4().hex[:12]
         with st.status("Agent 执行中…", expanded=True) as status:
             status.write("解析意图 → 权限检查 → 执行 Skill → 校验结果 → 生成回答 → 审计")
-            state = agent_service().query(
-                question, user_id=user_id, role=role, data_scope=data_scope,
-                use_llm=use_llm, session_id=st.session_state.get("session_id", "streamlit"),
-            )
-            st.session_state["agent_state"] = state
-            status.update(label="Agent 执行完成", state="complete", expanded=False)
+            try:
+                state = agent_service().query(
+                    question, user_id=user_id, role=role, data_scope=data_scope,
+                    use_llm=use_llm, session_id=st.session_state.get("session_id", "streamlit"),
+                )
+                st.session_state["agent_state"] = state
+                status.update(label="Agent 执行完成", state="complete", expanded=False)
+            except Exception as exc:  # noqa: BLE001
+                with request_log_context(surface="agent_ui", use_llm=use_llm) as diagnostic:
+                    log_event("agent_ui_request_failed", error_type=type(exc).__name__)
+                status.update(label="Agent 执行失败", state="error", expanded=False)
+                st.error("Agent 调用失败：%s\n诊断编号：%s" % (
+                    type(exc).__name__, diagnostic.get("trace_id") or diagnostic.get("request_id", "N/A")
+                ))
 
     state = st.session_state.get("agent_state")
     if state:
@@ -358,6 +424,7 @@ def render_agent() -> None:
 
         if error_type:
             st.error(answer or "分析失败，请检查问题范围或稍后重试。")
+            st.caption("诊断编号：%s" % (state.get("trace_id") or state.get("request_id") or "N/A"))
         elif answer:
             st.success("分析完成")
 

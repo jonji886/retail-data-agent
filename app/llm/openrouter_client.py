@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 from openai import OpenAI
 
 from app.config import load_env_file
+from app.observability.runtime_logging import log_event
 
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
@@ -141,12 +142,25 @@ class OpenRouterClient:
                 **metadata,
                 "latency_ms": int((time.monotonic() - started) * 1000),
             }
+            log_event(
+                "llm_request_completed",
+                provider=self.config.provider,
+                model=self.config.model,
+                fallback_used=False,
+                latency_ms=self.last_call_metadata["latency_ms"],
+            )
             return content
 
         # OpenRouter 已按 max_retries 重试仍失败时，才跨 Provider 切换。
         # DeepSeek fallback 不会再叠加 OpenRouter 的候选模型路由参数。
         fallback_error: Optional[Exception] = None
         if self._deepseek_client is not None:
+            log_event(
+                "llm_fallback_started",
+                from_provider=self.config.provider,
+                to_provider=DEEPSEEK_PROVIDER,
+                primary_error_type=type(error).__name__ if error else "unknown",
+            )
             fallback_content, fallback_metadata, fallback_error = self._request_provider(
                 self._deepseek_client, DEEPSEEK_PROVIDER, self.config.deepseek_model,
                 response_format, system_prompt, user_prompt, temperature, max_tokens,
@@ -162,8 +176,22 @@ class OpenRouterClient:
                     "fallback_reason": type(error).__name__ if error else "provider_error",
                     "primary_retry_count": metadata.get("retry_count", 0),
                 }
+                log_event(
+                    "llm_request_completed",
+                    provider=DEEPSEEK_PROVIDER,
+                    model=self.config.deepseek_model,
+                    fallback_used=True,
+                    fallback_from=self.config.provider,
+                    latency_ms=self.last_call_metadata["latency_ms"],
+                )
                 return fallback_content
             error = fallback_error or error
+        else:
+            log_event(
+                "llm_fallback_skipped",
+                from_provider=self.config.provider,
+                reason="deepseek_not_configured",
+            )
 
         self.last_call_metadata = {
             **metadata,
@@ -175,6 +203,17 @@ class OpenRouterClient:
             "fallback_provider": DEEPSEEK_PROVIDER if self._deepseek_client is not None else None,
             "fallback_error_type": type(fallback_error).__name__ if fallback_error else None,
         }
+        log_event(
+            "llm_request_failed",
+            provider=self.config.provider,
+            model=self.config.model,
+            error_type=self.last_call_metadata["error_type"],
+            fallback_available=self.last_call_metadata["fallback_available"],
+            fallback_error_type=self.last_call_metadata["fallback_error_type"],
+            latency_ms=self.last_call_metadata["latency_ms"],
+        )
+        if self._deepseek_client is None:
+            raise RuntimeError("OpenRouter 请求失败，且未配置 DeepSeek 故障切换") from error
         raise RuntimeError("OpenRouter 与 DeepSeek 请求均失败") from error
 
     def _request_provider(
@@ -217,7 +256,7 @@ class OpenRouterClient:
                 if not content:
                     raise RuntimeError("empty_response")
                 usage = getattr(response, "usage", None)
-                return content, {
+                metadata = {
                     "provider": provider,
                     "model": model,
                     "retry_count": retries,
@@ -227,9 +266,34 @@ class OpenRouterClient:
                     "output_tokens": getattr(usage, "completion_tokens", None),
                     "total_tokens": getattr(usage, "total_tokens", None),
                     "fallback_models": list(self.config.fallback_models) if include_openrouter_routing else [],
-                }, None
+                }
+                log_event(
+                    "llm_provider_request",
+                    provider=provider,
+                    model=model,
+                    outcome="success",
+                    attempt=attempt + 1,
+                    retry_count=retries,
+                    latency_ms=metadata["latency_ms"],
+                    input_tokens=metadata["input_tokens"],
+                    output_tokens=metadata["output_tokens"],
+                    total_tokens=metadata["total_tokens"],
+                )
+                return content, metadata, None
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
+                log_event(
+                    "llm_provider_request",
+                    provider=provider,
+                    model=model,
+                    outcome="error",
+                    attempt=attempt + 1,
+                    retry_count=retries,
+                    error_type=type(exc).__name__,
+                    http_status=getattr(exc, "status_code", None),
+                    error_code=getattr(exc, "code", None),
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                )
                 if attempt < retry_limit:
                     retries += 1
                     time.sleep(min(0.25 * (2 ** attempt), 1.0))

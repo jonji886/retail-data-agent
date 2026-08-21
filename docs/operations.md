@@ -2,6 +2,23 @@
 
 本项目的默认目标是“可控失败、可追踪恢复”。用户看到稳定的业务提示，原始驱动错误只保留在受控日志的类型字段中；通过 `trace_id` 可回看节点、模型、数据源和耗时。
 
+## Render 调用日志
+
+Render 部署后，进入服务的 **Logs → Application logs**，搜索下面的 `event` 名称即可定位一次请求。自然语言问数页面会把 `trace_id` 显示在成功结果的审计信息和错误提示中；Agent 页面会在技术详情中显示 `request_id` 与 `trace_id`；FastAPI `/api/v1/query` 响应中的 `run_id` 就是 `trace_id`。将该 ID 粘贴到 Render 日志搜索框，可把入口、LLM、重试、故障切换和最终结果串起来。
+
+| 事件 | 用途 |
+|---|---|
+| `natural_language_request_started` / `completed` / `failed` | 自然语言问数入口及耗时、结果行数 |
+| `agent_request_started` / `completed` / `failed` | Agent Runtime 总体结果、权限、Skill/LLM 调用数量 |
+| `agent_request_rejected` / `application_request_completed` | Demo quota 拒绝和 Application Service 返回结果 |
+| `http_query_completed` | FastAPI `/api/v1/query` 的 HTTP 返回状态和耗时 |
+| `report_request_started` / `completed` / `failed` | 报告生成入口及耗时 |
+| `llm_provider_request` | OpenRouter 或 DeepSeek 的每次实际请求、重试次数、HTTP 状态、错误类型、Token 与延迟 |
+| `llm_fallback_started` / `skipped` | OpenRouter 失败后的 DeepSeek 切换或未配置原因 |
+| `llm_request_completed` / `failed` | 一次 LLM 逻辑调用的最终 Provider、是否切换和最终错误 |
+
+日志只输出 `request_id`、`trace_id`、Provider、模型、错误类型、状态、耗时和 Token 统计，不输出问题正文、Prompt、API Key、Authorization、数据库连接串或查询结果。Render 免费实例休眠或重启后，历史日志的保留和检索能力以 Render 当前方案为准；需要长期留存时应接入外部日志系统。
+
 | Failure | Detection | Behaviour | User response | Trace/Audit |
 |---|---|---|---|---|
 | OpenRouter timeout / HTTP error | 客户端异常与超时 | 最多重试 `LLM_MAX_RETRIES`（0～2）；仍失败且配置 `DEEPSEEK_API_KEY` 时，同一请求最多切换一次 DeepSeek；两个 Provider 都失败才确定性回退 | 优先返回 DeepSeek 结果，否则返回规则链路结果 | 记录实际 provider、model、`retry_count`、`fallback_used`、`fallback_from`、`fallback_reason` |
