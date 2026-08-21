@@ -268,6 +268,21 @@ python3 -m compileall app
 docker compose up --build
 ```
 
+## Render Free 部署
+
+当前 MVP 可以使用 Render Free Web Service 运行，不需要 Supabase。部署使用仓库内的 `Dockerfile` 和 `render.yaml`，应用启动时会生成固定种子的本地 DuckDB 数据。
+
+最小配置如下：
+
+```text
+Runtime: Docker
+Instance Type: Free
+PORT: 8501
+Health Check Path: /_stcore/health
+```
+
+详细控制台配置、环境变量、验证步骤和免费版数据持久化限制见 [docs/deploy-render.md](docs/deploy-render.md)。Render Free 适合 Demo 和低流量验证；审计日志与 DuckDB 文件不保证跨重启持久化。
+
 ### 项目结构
 
 ```text
@@ -287,7 +302,7 @@ configs/
 scripts/        # 评测、一致性校验、Smoke Test、Ground Truth 生成
 reports/        # evaluation_report.json / llm_evaluation_report.json
 tests/          # 16 个测试文件，85 个用例
-docs/           # architecture / evaluation / demo-script
+docs/           # architecture / evaluation / demo-script / deploy-render
 ```
 
 ---
@@ -298,7 +313,8 @@ docs/           # architecture / evaluation / demo-script
 
 - PostgreSQL / MySQL 等外部数据库（当前使用本地 DuckDB 虚拟数据）；
 - Multi-Agent、MCP、RAG、Vector DB、Kubernetes、微服务；
-- 复杂监控平台与可观测产品。
+- 复杂监控平台与可观测产品；
+- 生产级公网部署、高可用和持久化审计（当前仅提供 Render Free Demo 部署路径）。
 
 这些是"下一阶段候选"，不是"已实现能力"。见 [SPEC.md](SPEC.md) 的 Non-goals 与 Future。
 
@@ -310,4 +326,5 @@ docs/           # architecture / evaluation / demo-script
 - [docs/architecture.md](docs/architecture.md)：架构与设计决策
 - [docs/evaluation.md](docs/evaluation.md)：评测目标、Golden Dataset、指标口径
 - [docs/demo-script.md](docs/demo-script.md)：面试演示脚本（5～10 分钟）
+- [docs/deploy-render.md](docs/deploy-render.md)：Render Free 部署说明与限制
 - [docs/README_GUIDELINES.md](docs/README_GUIDELINES.md)：README 编写规范

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: retail-data-agent
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: PORT
+        value: "8501"
+      - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+        value: "false"
+      - key: DEEPSEEK_API_KEY
+        sync: false

@@ -92,6 +92,7 @@ Last verified: 2026-08-20
 - 流式处理（Kafka）与分布式编排（Kubernetes）；
 - 前端重构（React 等）；
 - 复杂监控平台；
+- 生产级公网部署、高可用和持久化审计；当前仅提供 Render Free Demo 部署路径；
 - 预测、库存、供应链等新增业务 Agent。
 
 ## 6. Security Requirements（Implemented）

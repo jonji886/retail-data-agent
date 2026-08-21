@@ -226,4 +226,5 @@ Tool 调用记录：tool_name / latency / status / error_type。
 - Human-in-the-loop（加入写操作 Tool 时）
 - 统计/时序模型预警
 - 多轮上下文
-- 公网部署与监控
+- Render Free Demo 部署（当前路径见 `docs/deploy-render.md`）
+- 生产级公网部署与监控
