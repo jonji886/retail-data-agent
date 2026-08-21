@@ -124,11 +124,34 @@ parse_request
 
 ### ReadOnly SQL
 
-`ReadOnlySQLRunner` 校验：
-- 只允许 SELECT
-- 禁止 INSERT/UPDATE/DELETE/DROP/ALTER/CREATE/COPY 等
-- 只允许单条语句
-- DuckDB 以 `read_only=True` 打开
+SQL 安全边界是纵深防御，而不是只依赖一个正则：
+
+```text
+Query Plan
+  ↓
+Permission Guard
+  ↓
+Semantic Layer
+  ↓
+Application SQL Guard（SELECT-only / 单语句 / 禁止写操作与管理操作）
+  ↓
+DuckDB Capability Restriction（external access=false / 扩展自动加载与安装关闭）
+  ↓
+Read-only Connection（lock_configuration=true）
+  ↓
+Result Guard（max result rows / memory limit / threads）
+```
+
+`ReadOnlySQLRunner` 校验只允许单条 `SELECT`，并拒绝
+`INSERT/UPDATE/DELETE/DROP/ALTER/CREATE/COPY/ATTACH/DETACH/PRAGMA/INSTALL/LOAD`。
+但 SELECT 本身也可能调用 `read_csv`、`read_text`、`read_parquet` 或 HTTP table
+function，因此每条只读连接都显式关闭 DuckDB `enable_external_access`，关闭扩展
+自动安装/加载，并在配置完成后锁定。外部访问错误对用户只返回稳定的
+`external_access_blocked`，不暴露本地路径或 DuckDB stacktrace。
+
+默认资源策略为最多返回 1000 行、512MB memory limit、2 threads，可通过
+`DB_MAX_RESULT_ROWS`、`DB_MEMORY_LIMIT`、`DB_THREADS` 做受控资源调整；没有可靠的
+跨 DuckDB 版本 hard timeout，当前 MVP 不伪装提供 query timeout。
 
 ## 7. Evaluation 设计
 
@@ -160,6 +183,12 @@ parse_request
 - Deterministic Baseline：`scripts/run_evaluation.py`（无 API Key 可运行）
 - LLM E2E：`scripts/run_llm_evaluation.py`（需 API Key，无则 skip）
 
+### Relative Time Policy
+
+`app/domain/time_range.py` 是 deterministic 与 LLM 两条解析链路共用的相对时间策略：
+“过去/最近/近 N 个月”统一解释为包含当前月的 N 个自然月；“过去/最近/近 N 天”
+解释为包含参考日的滚动 N 天。参考日来自数据集最新日期，不使用机器当前时间。
+
 ## 8. Badcase 生命周期
 
 ```
@@ -174,6 +203,12 @@ Demo Badcase（`bc_demo_001`）：
 - 原因：sales_amount synonyms 未包含"营业额"
 - 修复：metrics.json 添加同义词
 - 回归用例：g009（PASS）
+
+真实 LLM Badcase（`bc_llm_001`）：
+- 问题：“过去3个月各区域销售额趋势”在真实报告中返回 24 行，Ground Truth 为 12 行；
+- 根因：LLM 返回的相对日期未经过确定性策略归一化；
+- 修复：统一时间策略覆盖相对时间的模型日期；
+- 回归用例：g016，纳入 Golden Dataset；下一次真实 LLM 全量评测需复核。
 
 ## 9. Observability / Trace
 

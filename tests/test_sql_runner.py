@@ -1,5 +1,4 @@
 import unittest
-from pathlib import Path
 
 from app.tools.sql_runner import ReadOnlySQLRunner, SQLSafetyError
 

@@ -9,7 +9,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 class BadcaseManager:
@@ -124,6 +124,28 @@ DEMO_BADCASE = {
 }
 
 
+REAL_LLM_BADCASE = {
+    "badcase_id": "bc_llm_001",
+    "event_id": "llm_evaluation_2026-08-19",
+    "timestamp": "2026-08-19T09:33:48Z",
+    "question": "过去3个月各区域销售额趋势",
+    "category": "relative_time",
+    "reason": "真实 LLM 评测 g016 返回 24 行，Ground Truth 期望 12 行",
+    "expected": "按当前月及前两个月的 3 个完整自然月返回 12 个区域月度结果",
+    "actual": "评测报告记录 row_count=24 expected=12",
+    "root_cause": "LLM 计划中的 start_date/end_date 未经过统一相对时间策略归一化，模型日期可多包含一个月",
+    "fix": "新增 deterministic relative-time policy；对过去/最近/近 N 个月统一按包含当前月的 N 个自然月解析，并在 LLM 计划校验时覆盖模型日期",
+    "fixed_version": "relative-time-policy",
+    "regression_case_id": "g016",
+    "status": "resolved",
+    "created_at": "2026-08-19T09:33:48Z",
+    "resolved_at": "2026-08-20T00:00:00Z",
+}
+
+
+KNOWN_BADCASES = (DEMO_BADCASE, REAL_LLM_BADCASE)
+
+
 def seed_demo_badcase(root: Path) -> str:
     """写入 demo badcase 记录（如果不存在）。"""
     manager = BadcaseManager(root)
@@ -132,3 +154,16 @@ def seed_demo_badcase(root: Path) -> str:
         return "bc_demo_001"
     manager._append(DEMO_BADCASE)
     return "bc_demo_001"
+
+
+def seed_known_badcases(root: Path) -> List[str]:
+    """将已完成 RCA 的 Badcase 证据写入当前运行时 JSONL（幂等）。"""
+    manager = BadcaseManager(root)
+    existing = {record.get("badcase_id") for record in manager.list_all()}
+    seeded: List[str] = []
+    for badcase in KNOWN_BADCASES:
+        badcase_id = str(badcase["badcase_id"])
+        if badcase_id not in existing:
+            manager._append(dict(badcase))
+        seeded.append(badcase_id)
+    return seeded

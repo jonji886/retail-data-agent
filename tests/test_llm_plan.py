@@ -38,7 +38,21 @@ class LLMPlanValidationTest(unittest.TestCase):
                 "clarification": None,
             })
 
+    def test_relative_time_is_normalized_by_policy(self) -> None:
+        parsed = self.engine._build_parsed_question("过去3个月各区域销售额趋势", {
+            "metric": "sales_amount",
+            "dimensions": ["region_name"],
+            "filters": {},
+            "time_grain": "month",
+            # 模拟模型错误地多返回一个月；业务策略应覆盖模型日期。
+            "start_date": "2025-09-01",
+            "end_date": "2025-12-31",
+            "comparison": None,
+            "clarification": None,
+        })
+        self.assertEqual(parsed.date_range.start.isoformat(), "2025-10-01")
+        self.assertEqual(parsed.date_range.end.isoformat(), "2025-12-31")
+
 
 if __name__ == "__main__":
     unittest.main()
-

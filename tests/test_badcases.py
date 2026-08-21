@@ -3,7 +3,12 @@
 import unittest
 from pathlib import Path
 
-from app.quality.badcases import DEMO_BADCASE, BadcaseManager, seed_demo_badcase
+from app.quality.badcases import (
+    DEMO_BADCASE,
+    REAL_LLM_BADCASE,
+    BadcaseManager,
+    seed_known_badcases,
+)
 
 
 ROOT = Path(".")
@@ -56,6 +61,16 @@ class BadcaseLifecycleTest(unittest.TestCase):
         self.assertTrue(bc["fix"])
         self.assertTrue(bc["regression_case_id"])
         self.assertTrue(bc["resolved_at"])
+
+    def test_real_llm_badcase_is_linked_to_golden_regression(self) -> None:
+        self.assertEqual(REAL_LLM_BADCASE["status"], "resolved")
+        self.assertEqual(REAL_LLM_BADCASE["regression_case_id"], "g016")
+        self.assertTrue(REAL_LLM_BADCASE["root_cause"])
+        self.assertTrue(REAL_LLM_BADCASE["fix"])
+
+        self.assertEqual(seed_known_badcases(self.root), ["bc_demo_001", "bc_llm_001"])
+        records = {record["badcase_id"]: record for record in self.manager.list_all()}
+        self.assertEqual(records["bc_llm_001"]["status"], "resolved")
 
 
 if __name__ == "__main__":

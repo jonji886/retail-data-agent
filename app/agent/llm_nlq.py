@@ -6,9 +6,10 @@ import json
 import re
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, Mapping
 
 from app.agent.nlq import DateRange, NLQError, NaturalLanguageQueryEngine, ParsedQuestion
+from app.domain.time_range import resolve_relative_time
 from app.llm.deepseek_client import DeepSeekClient, DeepSeekConfig
 
 
@@ -45,6 +46,8 @@ class DeepSeekNLQEngine:
             "你的任务是把用户的中文问题转换成结构化 JSON。\n"
             "禁止生成 SQL，禁止编造数据，禁止输出 JSON 之外的内容。\n"
             "数据最新日期是 2025-12-31；没有明确时间时使用本月（2025-12）。\n"
+            "相对时间必须按统一规则理解：过去/最近/近 N 个月包含当前月，共 N 个自然月；"
+            "过去/最近/近 N 天为包含当前日的滚动 N 天。\n"
             "同比 comparison=yoy，环比 comparison=mom，否则 comparison=null。\n"
             "所有 metric、dimension、filter key 必须使用下面提供的规范名称。\n\n"
             "输出格式：\n"
@@ -98,8 +101,22 @@ class DeepSeekNLQEngine:
         time_grain = plan.get("time_grain", "month")
         if not isinstance(time_grain, str) or time_grain not in metric.time_grains:
             raise LLMPlanError("指标不支持时间粒度：%s" % time_grain)
-        start_date = self._date(plan.get("start_date"), "start_date")
-        end_date = self._date(plan.get("end_date"), "end_date")
+        try:
+            relative = resolve_relative_time(question, self.deterministic.reference_date)
+        except ValueError as exc:
+            raise LLMPlanError(str(exc)) from exc
+        if relative:
+            # LLM 可以识别意图，但不能自行决定相对时间窗口；统一由确定性策略收敛。
+            start_date = relative.start_date
+            end_date = relative.end_date
+            date_label = relative.label
+            time_grain = relative.grain
+            if time_grain not in metric.time_grains:
+                raise LLMPlanError("指标不支持相对时间粒度：%s" % time_grain)
+        else:
+            start_date = self._date(plan.get("start_date"), "start_date")
+            end_date = self._date(plan.get("end_date"), "end_date")
+            date_label = "%s 至 %s" % (start_date, end_date)
         if start_date > end_date:
             raise LLMPlanError("时间范围无效")
         comparison = plan.get("comparison")
@@ -110,7 +127,7 @@ class DeepSeekNLQEngine:
             metric=metric,
             dimensions=dimensions,
             filters=filters,
-            date_range=DateRange(start_date, end_date, time_grain, "%s 至 %s" % (start_date, end_date)),
+            date_range=DateRange(start_date, end_date, time_grain, date_label),
             comparison=comparison,
         )
 

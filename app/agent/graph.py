@@ -29,7 +29,6 @@ from app.agent.router import (
     route_after_execute,
     route_after_parse,
     route_after_policy,
-    route_after_response,
     route_after_validate,
 )
 from app.agent.state import AgentState
@@ -41,7 +40,6 @@ from app.agent.state import AgentState
 
 def unsupported_response(state: AgentState) -> AgentState:
     """对不支持意图生成用户友好回答。"""
-    intent = state.get("intent", "unsupported")
     msg = state.get("error_message", "暂不支持该类问题。")
     answer = "无法处理该请求：%s\n\n当前支持的能力：指标查询、趋势分析、异常检测、归因分析、报告生成。" % msg
     return {**state, "answer": answer}

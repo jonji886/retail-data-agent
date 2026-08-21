@@ -2,3 +2,4 @@ duckdb>=1.0,<2.0
 openai>=1.0,<2.0
 streamlit>=1.30,<2.0
 langgraph>=0.6,<0.7
+ruff>=0.8,<1.0

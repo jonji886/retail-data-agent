@@ -3,7 +3,6 @@
 import unittest
 from pathlib import Path
 
-from app.agent.contracts import ErrorType
 from app.agent.graph import run_agent
 from app.tools.sql_runner import ReadOnlySQLRunner, SQLSafetyError
 

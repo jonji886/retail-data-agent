@@ -5,9 +5,8 @@
 
 from __future__ import annotations
 
-from typing import Optional
 
-from app.agent.contracts import ErrorType, Intent
+from app.agent.contracts import Intent
 from app.agent.state import AgentState
 
 

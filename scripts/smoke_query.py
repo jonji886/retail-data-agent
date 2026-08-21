@@ -6,9 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import duckdb
-
 from app.semantic_layer.catalog import MetricCatalog
+from app.tools.sql_runner import ReadOnlySQLRunner
 
 
 def main() -> None:
@@ -21,11 +20,7 @@ def main() -> None:
         start_date="2025-10-01",
         end_date="2025-11-30",
     )
-    connection = duckdb.connect(str(db_path), read_only=True)
-    try:
-        rows = connection.execute(query).fetchall()
-    finally:
-        connection.close()
+    rows = ReadOnlySQLRunner(db_path).query(query)
     if not rows:
         raise SystemExit("烟囱查询没有返回结果")
     print("Smoke query passed")

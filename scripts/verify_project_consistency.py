@@ -7,6 +7,7 @@
 3. README "Project Status" 块中的核心数字（单一事实来源）与真实值一致
 4. Web Demo Tab 数量 == app/web_app.py 实际 Tab 数量
 5. LLM 报告不得出现 "0 LLM calls + 100% pass" 的误导组合
+6. README Evaluation 数字必须与 deterministic / LLM 报告一致
 
 用法:
     python3 scripts/verify_project_consistency.py
@@ -66,6 +67,29 @@ def web_tab_count() -> int:
     return len(re.findall(r"\"[^\"]+\"", m.group(1)))
 
 
+def _readme_section(title: str, next_title: str) -> str:
+    text = readme_text()
+    start = text.find(title)
+    if start < 0:
+        return ""
+    end = text.find(next_title, start + len(title))
+    return text[start:] if end < 0 else text[start:end]
+
+
+def _readme_table_value(section: str, label: str) -> str:
+    match = re.search(
+        r"^\|\s*%s\s*\|\s*(.*?)\s*\|\s*$" % re.escape(label),
+        section,
+        re.MULTILINE,
+    )
+    return match.group(1) if match else ""
+
+
+def _percentage_matches(value: str, expected_rate: Any) -> bool:
+    match = re.search(r"([0-9]+(?:\.[0-9]+)?)%", value)
+    return bool(match) and abs(float(match.group(1)) - float(expected_rate) * 100) < 0.05
+
+
 def main() -> int:
     errors: List[str] = []
     print("== Project Consistency Check ==")
@@ -88,6 +112,9 @@ def main() -> int:
         errors.append("缺少 evaluation_report.json")
     else:
         report = load_json(EVAL_REPORT_PATH)
+        if report.get("mode") not in (None, "deterministic"):
+            print("  [FAIL] deterministic report mode=%s 异常" % report.get("mode"))
+            errors.append("deterministic report mode 异常")
         if report.get("total") != golden_total:
             print("  [FAIL] evaluation_report total=%s 与 golden 数量 %d 不一致"
                   % (report.get("total"), golden_total))
@@ -154,6 +181,12 @@ def main() -> int:
         if mode != "llm":
             print("  [FAIL] LLM 报告 mode=%s 应为 llm（旧版报告，请删除或重新生成）" % mode)
             errors.append("LLM 报告 mode 异常")
+        elif report.get("total") != golden_total:
+            print("  [FAIL] LLM 报告 total=%s 与 golden 数量 %s 不一致" % (report.get("total"), golden_total))
+            errors.append("LLM 报告 total 漂移")
+        elif len(report.get("results", [])) != report.get("total"):
+            print("  [FAIL] LLM 报告 results 数量与 total 不一致")
+            errors.append("LLM 报告 results 数量漂移")
         elif calls == 0 and rate == 1.0:
             print("  [FAIL] LLM 报告 0 calls 但 100% pass，存在误导，请重新生成")
             errors.append("LLM 报告 0 calls / 100% pass 误导")
@@ -161,6 +194,59 @@ def main() -> int:
             print("  OK: mode=%s, total=%s, passed=%s, llm_calls=%s, fallback=%s"
                   % (mode, report.get("total"), report.get("passed"), calls,
                      report.get("fallback_count")))
+
+    # 6) README Evaluation 证据必须来自报告，而不是独立维护的数字。
+    print("6) README Evaluation evidence:")
+    deterministic_section = _readme_section(
+        "### Deterministic Regression", "### Real LLM E2E Evaluation"
+    )
+    if EVAL_REPORT_PATH.exists():
+        deterministic = load_json(EVAL_REPORT_PATH)
+        overall_value = _readme_table_value(deterministic_section, "Overall Pass Rate")
+        executable_value = _readme_table_value(deterministic_section, "Executable Success Rate")
+        expected_overall_ratio = "%d/%d" % (
+            deterministic.get("passed", 0), deterministic.get("total", 0)
+        )
+        expected_executable_ratio = "%d/%d" % (
+            sum(
+                1
+                for item in deterministic.get("results", [])
+                if item.get("executable") and item.get("execution_success")
+            ),
+            deterministic.get("executable_cases", 0),
+        )
+        if (
+            expected_overall_ratio not in overall_value
+            or not _percentage_matches(overall_value, deterministic.get("overall_pass_rate", 0))
+        ):
+            print("  [FAIL] README deterministic Overall Pass Rate 与报告不一致")
+            errors.append("README deterministic Overall Pass Rate 漂移")
+        elif (
+            expected_executable_ratio not in executable_value
+            or not _percentage_matches(
+                executable_value, deterministic.get("executable_success_rate", 0)
+            )
+        ):
+            print("  [FAIL] README deterministic Executable Success Rate 与报告不一致")
+            errors.append("README deterministic Executable Success Rate 漂移")
+        else:
+            print("  OK: README deterministic 指标与报告一致")
+
+    if LLM_REPORT_PATH.exists():
+        llm = load_json(LLM_REPORT_PATH)
+        llm_section = _readme_section(
+            "### Real LLM E2E Evaluation", "### Known / Resolved Badcases"
+        )
+        expected_llm = "%d/%d" % (llm.get("passed", 0), llm.get("total", 0))
+        expected_calls = str(llm.get("total_llm_calls"))
+        if (
+            expected_llm not in llm_section
+            or expected_calls not in _readme_table_value(llm_section, "LLM Calls")
+        ):
+            print("  [FAIL] README LLM 指标与真实报告不一致")
+            errors.append("README LLM 指标漂移")
+        else:
+            print("  OK: README LLM 指标与真实报告一致")
 
     if errors:
         print("\nConsistency check FAILED (%d issue(s)):" % len(errors))

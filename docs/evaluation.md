@@ -94,6 +94,21 @@ Executable Success Rate = 100%（27/27，仅统计期望执行的用例）
 - 未配置 `DEEPSEEK_API_KEY` 时**明确 SKIP 且不生成报告**，禁止输出"0 calls / 100% pass"的误导结果；
 - 输出 `reports/llm_evaluation_report.json`。
 
+两条链路不混合：Deterministic Regression 是 GitHub Actions 的阻断门禁；Real
+LLM E2E 只在手动 workflow 或本地显式运行时调用 API。未配置 Key 时脚本会明确
+SKIP 且不生成报告，手动 workflow 会在执行前因缺少 Secret 失败。
+
+### Relative Time Policy
+
+`app/domain/time_range.py` 统一定义相对时间，参考日使用数据集最新日期：
+
+- `过去/最近/近 N 个月`：包含当前月，共 N 个自然月；
+- `本月`：当月 1 日至参考日；`上个月`：上一个完整自然月；
+- `今年`：本年 1 月 1 日至参考日；`去年`：上一完整自然年；
+- `过去/最近/近 N 天`：包含参考日的滚动 N 个日历日。
+
+LLM 返回的相对日期会被该策略覆盖，避免模型把“过去 3 个月”漂移成 4 个月。
+
 ## 5. 常见疑问
 
 **Q：为什么 Overall 100% 但 Executable 只算 27 个？**
@@ -101,3 +116,9 @@ A：8 个用例本来就是"应该拒绝/拦截"的（不支持 2 + 安全 4 + �
 
 **Q：如何判断一次评测是否可信？**
 A：先跑 `python3 scripts/verify_project_consistency.py`：报告 total 必须等于 Golden 数量、指标分母必须自洽、LLM 报告不得出现 0 calls / 100% pass。
+
+## 5. CI 阻断门禁
+
+Push / Pull Request 依次执行静态检查、compileall、完整单测、确定性 Golden
+评测、一致性校验和 smoke test。任何一步返回非 0 都会阻断 CI；真实 LLM
+评测不进入普通 PR 流程。

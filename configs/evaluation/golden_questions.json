@@ -265,6 +265,8 @@
       "id": "g016",
       "category": "trend",
       "question": "过去3个月各区域销售额趋势",
+      "badcase_id": "bc_llm_001",
+      "regression_policy": "relative_months_include_current",
       "intent": "trend_analysis",
       "metric": "sales_amount",
       "dimension": "region_name",

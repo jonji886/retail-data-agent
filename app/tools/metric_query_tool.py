@@ -44,7 +44,6 @@ def comparison_range(start: date, end: date, comparison: str) -> Tuple[date, dat
     if start.day == 1 and end.day >= 27:  # 整月
         prev_end = _month_range(prev_start.year, prev_start.month)[1]
     else:
-        from datetime import timedelta
         prev_end = _shift_month(end, -1)
     return prev_start, prev_end
 
@@ -85,11 +84,23 @@ class MetricQueryTool:
         try:
             current_rows = self.runner.query(current_sql)
         except SQLSafetyError as exc:
-            return ToolResult(success=False, error_type=ErrorType.QUERY_ERROR,
-                              error_message="SQL 安全校验失败：%s" % exc, metadata={"sql": current_sql})
-        except Exception as exc:  # noqa: BLE001
-            return ToolResult(success=False, error_type=ErrorType.QUERY_ERROR,
-                              error_message="SQL 执行失败：%s" % exc, metadata={"sql": current_sql})
+            return ToolResult(
+                success=False,
+                error_type=exc.reason_code,
+                error_message="查询被安全策略拒绝：%s" % exc,
+                metadata={
+                    "sql": current_sql,
+                    "reason_code": exc.reason_code,
+                    "guard_stage": exc.guard_stage,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            return ToolResult(
+                success=False,
+                error_type=ErrorType.QUERY_ERROR,
+                error_message="SQL 查询执行失败",
+                metadata={"sql": current_sql, "reason_code": "query_execution_failed"},
+            )
 
         comparison_sql: Optional[str] = None
         merged_rows: List[Dict[str, Any]] = current_rows
@@ -104,6 +115,17 @@ class MetricQueryTool:
                 )
                 previous_rows = self.runner.query(comparison_sql)
                 merged_rows = self._merge_comparison(current_rows, previous_rows, time_grain)
+            except SQLSafetyError as exc:
+                return ToolResult(
+                    success=False,
+                    error_type=exc.reason_code,
+                    error_message="对比查询被安全策略拒绝：%s" % exc,
+                    metadata={
+                        "sql": comparison_sql,
+                        "reason_code": exc.reason_code,
+                        "guard_stage": exc.guard_stage,
+                    },
+                )
             except Exception:  # noqa: BLE001
                 # 对比失败不致命，保留当前值
                 pass

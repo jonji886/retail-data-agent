@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +27,8 @@ def main() -> None:
     # v2 详细报告（分层指标：Plan / Execution / Result / Behavior）
     print("\n--- Evaluation 2.0 (分层指标) ---")
     report = run_golden_v2(ROOT)
+    report["mode"] = "deterministic"
+    report["generated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     print("Total cases: %d" % report["total"])
     print("[Overall]  pass rate: %.1f%%" % (report["overall_pass_rate"] * 100))
     print("[Plan]     accuracy: %.1f%%" % (report["plan_accuracy"] * 100))
@@ -50,7 +53,7 @@ def main() -> None:
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print("\nReport written to: %s" % report_path)
 
-    if passed != len(results):
+    if passed != len(results) or report.get("passed") != report.get("total"):
         raise SystemExit(1)
 
 

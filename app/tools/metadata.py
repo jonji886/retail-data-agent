@@ -10,9 +10,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import duckdb
-
 from app.agent.contracts import ToolResult
+from app.tools.sql_runner import open_readonly_connection
 
 
 class MetadataTool:
@@ -23,7 +22,7 @@ class MetadataTool:
 
     def get_data_context(self) -> Dict[str, Any]:
         """返回 {dataset_min_date, dataset_max_date, latest_data_date, timezone, last_refresh_at}。"""
-        connection = duckdb.connect(str(self.database_path), read_only=True)
+        connection = open_readonly_connection(self.database_path)
         try:
             row = connection.execute(
                 "SELECT MIN(sale_date), MAX(sale_date) FROM fact_sales_daily"

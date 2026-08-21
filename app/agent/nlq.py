@@ -13,7 +13,8 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
-from app.semantic_layer.catalog import MetricCatalog, Metric, SemanticLayerError
+from app.domain.time_range import resolve_relative_time
+from app.semantic_layer.catalog import MetricCatalog, Metric
 from app.tools.sql_runner import ReadOnlySQLRunner
 
 
@@ -79,12 +80,18 @@ def _json(path: Path) -> Mapping[str, object]:
 class NaturalLanguageQueryEngine:
     AS_OF_DATE = date(2025, 12, 31)
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, reference_date: Optional[date] = None) -> None:
         self.root = root
         self.catalog = MetricCatalog.from_file(root / "configs" / "metrics" / "metrics.json")
         raw_dimensions = _json(root / "configs" / "dimensions.json")
         self.dimension_config = raw_dimensions["dimensions"]  # type: ignore[index]
         self.runner = ReadOnlySQLRunner(root / "data" / "retail.duckdb")
+        self.reference_date = reference_date or self._latest_data_date()
+
+    def _latest_data_date(self) -> date:
+        rows = self.runner.query("SELECT MAX(sale_date) AS latest_date FROM fact_sales_daily")
+        latest = rows[0].get("latest_date") if rows else None
+        return latest if isinstance(latest, date) else self.AS_OF_DATE
 
     def parse(self, question: str) -> ParsedQuestion:
         clean = question.strip().rstrip("？?。！!")
@@ -173,31 +180,26 @@ class NaturalLanguageQueryEngine:
         month_only = re.search(r"(?<!\d)(\d{1,2})月", question)
         if month_only:
             month = int(month_only.group(1))
-            return DateRange(_first_day(2025, month), _last_day(2025, month), "month", "2025年%d月" % month)
+            year = self.reference_date.year
+            return DateRange(_first_day(year, month), _last_day(year, month), "month", "%d年%d月" % (year, month))
 
-        past_months = re.search(r"过去\s*(\d+)\s*个?月", question)
-        if past_months:
-            count = int(past_months.group(1))
-            if count < 1 or count > 24:
-                raise NLQError("目前支持查询过去 1～24 个月")
-            start_month = _shift_month(self.AS_OF_DATE.replace(day=1), -(count - 1))
-            return DateRange(start_month, self.AS_OF_DATE, "month", "过去%d个月" % count)
-
-        if "本季度" in question or "当前季度" in question:
-            quarter_start_month = ((self.AS_OF_DATE.month - 1) // 3) * 3 + 1
-            return DateRange(_first_day(self.AS_OF_DATE.year, quarter_start_month), self.AS_OF_DATE, "month", "本季度")
-        if "今年" in question or "本年度" in question:
-            return DateRange(date(self.AS_OF_DATE.year, 1, 1), self.AS_OF_DATE, "month", "今年")
-        if "上月" in question or "上个月" in question:
-            previous = _shift_month(self.AS_OF_DATE.replace(day=1), -1)
-            return DateRange(previous, _last_day(previous.year, previous.month), "month", "上月")
-        if "本月" in question or "当前月" in question:
-            return DateRange(self.AS_OF_DATE.replace(day=1), self.AS_OF_DATE, "month", "本月")
         if "每天" in question or "每日" in question or "按日" in question:
-            return DateRange(self.AS_OF_DATE.replace(day=1), self.AS_OF_DATE, "day", "本月")
+            return DateRange(self.reference_date.replace(day=1), self.reference_date, "day", "本月")
         if "每周" in question or "按周" in question:
-            return DateRange(self.AS_OF_DATE.replace(day=1), self.AS_OF_DATE, "week", "本月")
-        return DateRange(self.AS_OF_DATE.replace(day=1), self.AS_OF_DATE, "month", "本月")
+            return DateRange(self.reference_date.replace(day=1), self.reference_date, "week", "本月")
+
+        try:
+            relative = resolve_relative_time(question, self.reference_date)
+        except ValueError as exc:
+            raise NLQError(str(exc)) from exc
+        if relative:
+            return DateRange(
+                relative.start_date,
+                relative.end_date,
+                relative.grain,
+                relative.label,
+            )
+        return DateRange(self.reference_date.replace(day=1), self.reference_date, "month", "本月")
 
     def _comparison_range(self, current: DateRange, comparison: str) -> DateRange:
         if comparison == "yoy":

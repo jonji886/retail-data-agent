@@ -3,7 +3,7 @@
 ```
 Status: MVP
 Version: v0.6.0
-Last verified: 2026-08-19
+Last verified: 2026-08-20
 ```
 
 > 本文件描述当前已实现的 MVP 产品范围与验收标准，与 README / 代码 / 评测报告保持一致。
@@ -55,6 +55,8 @@ Last verified: 2026-08-19
 - Data Scope：按 role 注入数据范围（region / store），查询计划层注入过滤条件。
 - 越权访问返回 DENY，且不执行任何业务工具。
 - Prompt Injection / 不支持请求被识别为 unsupported 并拒答。
+- DuckDB 只读连接关闭 external access、扩展自动加载/安装并锁定配置；结果最多返回 1000 行，默认 memory limit 512MB、2 threads。
+- SQL guard 拒绝外部文件、HTTP table function、extension install/load 等绕过路径，并返回稳定 reason code。
 
 ### 4.4 可观测与审计
 
@@ -67,6 +69,12 @@ Last verified: 2026-08-19
 - Golden Dataset：`configs/evaluation/golden_questions.json`，35 个用例，覆盖 9 类场景（normal / expression / trend / attribution / anomaly / report / boundary / permission / security）。
 - Evaluation 2.0：分层指标（Plan Accuracy、Executable Success Rate、Result Accuracy、Unsupported Reject Rate、Permission Safety Pass Rate、Security Defense Rate、Overall Pass Rate）。
 - LLM E2E 评测：真实调用 LLM，记录 model / llm_calls / fallback，未配置 Key 时明确 SKIP 且不生成报告。
+- 相对时间策略：`过去/最近/近 N 个月`、自然月和滚动天数由 `app/domain/time_range.py` 统一解析，LLM 计划不能覆盖该规则。
+
+### 4.7 CI 质量门禁
+
+- GitHub Actions 在 Push / Pull Request 上执行 ruff、compileall、完整单测、确定性 Golden 评测、一致性检查和 smoke test；任一步失败都会阻断。
+- 真实 LLM Evaluation 只通过手动 workflow 运行，API Key 仅来自 GitHub Secret，不进入普通 PR CI。
 
 ### 4.6 Web Demo（Streamlit）
 
@@ -94,6 +102,8 @@ Last verified: 2026-08-19
 - [x] 不支持 / 注入类请求明确拒答；
 - [x] 审计日志记录完整执行链路；
 - [x] 敏感配置（API Key）只通过环境变量注入，不提交仓库。
+- [x] DuckDB external access、扩展自动安装/加载被关闭，配置在连接内锁定。
+- [x] SQL 结果行数、memory limit 与 threads 有明确默认上限。
 
 ## 7. Evaluation Requirements
 
@@ -101,6 +111,7 @@ Last verified: 2026-08-19
 - 执行成功率分母 = 期望执行业务工具的用例（权限拒绝 / 不支持 / 安全拦截不计入）；
 - LLM 评测必须区分运行模式，禁止输出"0 LLM calls / 100% pass"的误导报告；
 - 一致性校验：`python3 scripts/verify_project_consistency.py` 必须通过。
+- CI 阻断门禁必须覆盖静态检查、单测、确定性评测、一致性检查和 smoke test；真实 LLM 评测单独手动运行。
 
 ## 8. Acceptance Criteria
 
@@ -108,12 +119,12 @@ Last verified: 2026-08-19
 2. `Golden Dataset 数量（35）== README 描述 == 评测报告 total`；
 3. `Web Demo Tab 数量（6）== README 描述 == web_app.py 实际`；
 4. `Overall Pass Rate` 与 `Executable Success Rate` 口径可解释、不冲突；
-5. 全部单元测试通过（当前 14 文件 / 72 用例）；
+5. 全部单元测试通过（当前 16 文件 / 85 用例）；
 6. 任何指标或能力声明都能在代码 / 测试 / 报告中找到证据。
 
 ## 9. Future（Out of Scope，未实现不宣传）
 
 - 外部数据库适配与生产级数据源；
 - 多 Agent 协作与工具生态（MCP 等）；
-- 在线评测 / CI 回归流水线；
+- 真实 LLM 在线评测自动进入每次 PR；
 - 更细粒度的审计可视化。

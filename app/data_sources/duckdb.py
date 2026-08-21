@@ -9,10 +9,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import duckdb
-
 from app.data_sources.base import DataSourceBase
-from app.tools.sql_runner import ReadOnlySQLRunner, SQLSafetyError
+from app.tools.sql_runner import ReadOnlySQLRunner, open_readonly_connection
 
 
 class DuckDBDataSource(DataSourceBase):
@@ -34,7 +32,7 @@ class DuckDBDataSource(DataSourceBase):
             "v_sales_enriched", "v_inventory_enriched", "v_traffic_enriched",
         ]
         meta: Dict[str, Any] = {"tables": {}}
-        connection = duckdb.connect(str(self.database_path), read_only=True)
+        connection = open_readonly_connection(self.database_path)
         try:
             for table in tables:
                 try:
@@ -48,7 +46,7 @@ class DuckDBDataSource(DataSourceBase):
 
     def get_date_range(self, table: str = "fact_sales_daily", date_column: str = "sale_date") -> Tuple[Optional[date], Optional[date]]:
         """返回指定表的日期范围。"""
-        connection = duckdb.connect(str(self.database_path), read_only=True)
+        connection = open_readonly_connection(self.database_path)
         try:
             row = connection.execute(
                 "SELECT MIN(%s), MAX(%s) FROM %s" % (date_column, date_column, table)

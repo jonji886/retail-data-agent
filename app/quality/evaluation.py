@@ -13,7 +13,6 @@ permission-allow）；权限拒绝、不支持、安全拦截类用例期望"不
 from __future__ import annotations
 
 import json
-import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional

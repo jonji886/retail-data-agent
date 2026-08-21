@@ -7,14 +7,13 @@ LLM 不可用时保持 deterministic baseline 可独立运行。
 
 from __future__ import annotations
 
-import json
 import time
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from app.agent.contracts import ErrorType, Intent, QueryPlan
-from app.agent.nlq import DateRange, NLQError, NaturalLanguageQueryEngine
+from app.agent.nlq import NLQError, NaturalLanguageQueryEngine
 from app.agent.state import AgentState
 from app.tools.metadata import MetadataTool
 
@@ -178,7 +177,6 @@ def parse_request(state: AgentState) -> AgentState:
         filters = dict(parsed_for_filters.filters)
     except NLQError:
         pass
-    region = _resolve_region(filters)
     metric = "sales_amount"
     try:
         parsed_for_metric = engine.parse(question)

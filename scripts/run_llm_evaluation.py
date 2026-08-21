@@ -123,17 +123,17 @@ def _delete_stale_report() -> None:
     """无 Key 运行时删除旧报告，避免误导性 '0 LLM calls / 100% pass' 残留。"""
     if REPORT_PATH.exists():
         REPORT_PATH.unlink()
-        print("已删除过期 LLM 报告（避免 '0 LLM calls / 100% pass' 误导）: %s" % REPORT_PATH)
+        print(f"已删除过期 LLM 报告（避免 '0 LLM calls / 100% pass' 误导）: {REPORT_PATH}")
 
 
-def main() -> None:
+def main() -> int:
     load_env_file(ROOT / ".env")
     api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
     if not api_key:
         _delete_stale_report()
         print("SKIP: 未配置 DEEPSEEK_API_KEY，LLM E2E 评测跳过（不会生成报告）。")
         print("确定性 baseline 评测请运行: python3 scripts/run_evaluation.py")
-        return
+        return 0
 
     model = os.getenv("DEEPSEEK_MODEL", DeepSeekConfig.from_env(ROOT).model)
     cases = _load_cases(ROOT)
@@ -215,10 +215,8 @@ def main() -> None:
         "mode": "llm",
         "model": model,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "note": "LLM-enabled evaluation：真实调用 LLM 构建 Query Plan。"
-                "fallback 表示 LLM 不可用或输出非法时回退确定性解析。"
-                "已知差异：相对时间窗口（如'过去3个月'）的解析结果可能"
-                "与确定性引擎不同，导致 ground truth 校验失败。",
+        "note": "LLM-enabled evaluation：真实调用 LLM 构建 Query Plan；"
+                "相对时间窗口由 deterministic relative-time policy 统一归一化。",
         "total": len(results), "passed": passed,
         "overall_pass_rate": passed / len(results) if results else 0,
         "plan_accuracy": plan_correct / len(results) if results else 0,
@@ -234,7 +232,8 @@ def main() -> None:
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print("Report written to: %s" % REPORT_PATH)
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

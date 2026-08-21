@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import streamlit as st
 
@@ -18,7 +18,7 @@ from app.agent.nlq import NLQError, NaturalLanguageQueryEngine
 from app.analytics.anomaly import SalesAnomalyDetector
 from app.analytics.attribution import SalesAttributor
 from app.quality.audit import AuditLogger
-from app.quality.evaluation import run_golden, run_golden_v2
+from app.quality.evaluation import run_golden_v2
 from app.reporting.weekly_report import RetailReportBuilder
 
 
@@ -316,7 +316,6 @@ def render_quality() -> None:
     st.subheader("质量评测与审计")
     report = run_golden_v2(ROOT)
     results = report["results"]
-    passed = report["passed"]
     def pct(v):
         return "%.1f%%" % (v * 100) if v is not None else "-"
     cols = st.columns(4)

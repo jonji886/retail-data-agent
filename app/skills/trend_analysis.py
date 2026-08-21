@@ -9,7 +9,7 @@ from datetime import date
 from typing import Any, Dict
 
 from app.agent.contracts import QueryPlan
-from app.tools.metric_query_tool import MetricQueryTool, _shift_month, _month_range
+from app.tools.metric_query_tool import MetricQueryTool, _shift_month
 
 
 def trend_analysis_skill(plan: QueryPlan, context: Dict[str, Any]) -> Dict[str, Any]:

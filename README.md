@@ -1,12 +1,14 @@
 # Retail Data Agent — 企业经营分析 Agent MVP
 
+[![CI](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml)
+
 > 将自然语言经营问题，转换为**受治理、可审计、可评测**的数据分析执行流程的 Agent MVP。
 > 面向 FDE / Agent 交付岗位的作品集项目：不追求框架数量，追求**架构边界、权限安全、评测验证与交付一致性**。
 
 ```
 Status: MVP
 Version: v0.6.0
-Last verified: 2026-08-19
+Last verified: 2026-08-20
 
 Golden cases: 35
 Evaluation cases: 35
@@ -133,7 +135,7 @@ single orchestrated graph（单一编排图）
 | Business semantics | Semantic Layer（`configs/metrics/metrics.json` 为单一口径来源） |
 | Tool governance | Skill + Tool 分层调用，按意图路由 |
 | Permission | RBAC（角色/用户）+ Data Scope（区域/门店数据权限） |
-| SQL safety | 只读 SQL 执行器，禁止写操作与多语句 |
+| SQL safety | 应用层 SQL Guard + DuckDB external access lockdown + 只读连接 + 结果行数限制 |
 | Observability | Trace（逐节点事件）+ Audit（JSONL 审计日志） |
 | Quality | Golden Dataset（35 用例，9 类场景，见 `docs/evaluation.md`） |
 | Regression | 自动化评测（Deterministic + LLM 两种模式） |
@@ -142,9 +144,13 @@ single orchestrated graph（单一编排图）
 
 ---
 
-## Evaluation（当前结果）
+## Evaluation（两条证据链分开）
 
-> 数据来自 `reports/evaluation_report.json`（确定性评测，Evaluation 2.0）。指标口径与分母定义见 [docs/evaluation.md](docs/evaluation.md)。
+> `Deterministic Regression ≠ Real LLM Accuracy`。前者验证编排、权限、语义层和执行链路的可重复回归；后者使用真实模型评测自然语言理解，受模型、网络和 quota 影响，不能混合统计。指标口径与分母定义见 [docs/evaluation.md](docs/evaluation.md)。
+
+### Deterministic Regression
+
+> 来源：`reports/evaluation_report.json`；命令：`python3 scripts/run_evaluation.py`。该报告是普通 PR 的 CI merge gate。
 
 | Metric | Value |
 | ------ | ----- |
@@ -157,7 +163,43 @@ single orchestrated graph（单一编排图）
 | Permission Safety Pass Rate | 100% |
 | Security Defense Rate | 100% |
 
-LLM 增强评测（真实调用 DeepSeek，记录 model / llm_calls / fallback）：`python3 scripts/run_llm_evaluation.py`。未配置 `DEEPSEEK_API_KEY` 时不生成 LLM 报告，避免"0 calls / 100% pass"的误导性结果。
+### Real LLM E2E Evaluation
+
+> 来源：`reports/llm_evaluation_report.json`，最近一次真实运行时间 `2026-08-19`，模型 `deepseek-v4-flash`。命令：`python3 scripts/run_llm_evaluation.py`；需配置 `DEEPSEEK_API_KEY`，也可手动触发 [GitHub Actions workflow](https://github.com/jonji886/retail-data-agent/actions/workflows/llm-evaluation.yml)。
+
+| Metric | Last verified value |
+| ------ | ------------------- |
+| Cases | 35 |
+| Passed / Overall Pass Rate | 34/35（97.1%） |
+| Executable Success | 26/27（96.3%） |
+| LLM Calls | 51 |
+| Fallback Count / Rate | 2 / 5.7% |
+| Total Duration | 198.7s |
+
+当前环境未配置 API Key，因此本轮没有伪造新的真实 LLM 数字；上表保留最近一次真实报告。相对时间 Badcase 已完成代码修复，待下一次完整真实评测复核。
+
+### Known / Resolved Badcases
+
+| Badcase | Root cause | Fix / regression |
+| -------- | ---------- | ---------------- |
+| `bc_demo_001`：各区域营业额 | `sales_amount` 同义词缺少“营业额” | 更新语义层；`g009` 回归通过 |
+| `bc_llm_001`：过去3个月各区域销售额趋势 | LLM 日期未经过统一相对时间策略，报告出现 24 行而 Ground Truth 为 12 行 | 新增 relative-time policy，`g016` 纳入 Golden；真实 LLM 报告待复跑 |
+
+### CI Quality Gate
+
+每次 Push / Pull Request 自动执行以下阻断门禁；任一步骤失败都会使 CI 失败：
+
+```text
+Prepare DuckDB fixture
+  → ruff check .
+  → compileall
+  → unit tests
+  → deterministic Golden evaluation
+  → project consistency check
+  → smoke test
+```
+
+真实 LLM Evaluation 不进入普通 PR CI，只能通过手动 workflow 运行，API Key 仅来自 GitHub Secret。
 
 ---
 
@@ -189,17 +231,21 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# 2.（可选）配置 LLM：复制 .env.example 为 .env 并填写 DEEPSEEK_API_KEY
+# 2. 生成本地可复现数据（首次运行或数据文件不存在时）
+python3 scripts/generate_data.py
+python3 scripts/init_db.py
+
+# 3.（可选）配置 LLM：复制 .env.example 为 .env 并填写 DEEPSEEK_API_KEY
 cp .env.example .env
 
-# 3. 启动 Web Demo
+# 4. 启动 Web Demo
 streamlit run app/web_app.py
 ```
 
 ### 常用命令
 
 ```bash
-# 单元测试（14 个测试文件，72 个用例）
+# 单元测试（16 个测试文件，85 个用例）
 python3 -m unittest discover -s tests
 
 # 确定性评测（生成 reports/evaluation_report.json）
@@ -213,6 +259,10 @@ python3 scripts/verify_project_consistency.py
 
 # 语义层与只读查询 Smoke Test
 python3 scripts/smoke_query.py
+
+# 与 GitHub Actions 相同的本地质量门禁（真实 LLM 不在其中）
+ruff check .
+python3 -m compileall app
 
 # Docker 部署
 docker compose up --build
@@ -236,7 +286,7 @@ configs/
   users.json    # RBAC 角色与数据权限
 scripts/        # 评测、一致性校验、Smoke Test、Ground Truth 生成
 reports/        # evaluation_report.json / llm_evaluation_report.json
-tests/          # 14 个测试文件，72 个用例
+tests/          # 16 个测试文件，85 个用例
 docs/           # architecture / evaluation / demo-script
 ```
 

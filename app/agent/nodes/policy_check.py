@@ -7,9 +7,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, Dict
 
-from app.agent.contracts import ErrorType
 from app.agent.state import AgentState
 from app.tools.permission import PermissionChecker
 

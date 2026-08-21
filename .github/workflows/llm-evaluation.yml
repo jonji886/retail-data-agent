@@ -1,0 +1,70 @@
+name: Real LLM Evaluation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  llm-evaluation:
+    name: DeepSeek E2E Evaluation
+    runs-on: ubuntu-latest
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Prepare deterministic DuckDB fixture
+        run: |
+          python scripts/generate_data.py
+          python scripts/init_db.py
+
+      - name: Validate required secret
+        run: |
+          if [ -z "${DEEPSEEK_API_KEY}" ]; then
+            echo "DEEPSEEK_API_KEY secret is required for real LLM evaluation."
+            exit 1
+          fi
+
+      - name: Run real LLM evaluation
+        run: python scripts/run_llm_evaluation.py
+
+      - name: Write evaluation summary
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+
+          report_path = Path("reports/llm_evaluation_report.json")
+          if not report_path.exists():
+              print("Real LLM report was not generated.")
+          else:
+              report = json.loads(report_path.read_text(encoding="utf-8"))
+              print("## Real LLM Evaluation")
+              print("- Model: %s" % report.get("model"))
+              print("- Cases: %s" % report.get("total"))
+              print("- Passed: %s" % report.get("passed"))
+              print("- Overall pass rate: %.1f%%" % (report.get("overall_pass_rate", 0) * 100))
+              print("- LLM calls: %s" % report.get("total_llm_calls"))
+              print("- Fallback count: %s" % report.get("fallback_count"))
+          PY
+
+      - name: Upload evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-evaluation-report
+          path: reports/llm_evaluation_report.json
+          if-no-files-found: warn

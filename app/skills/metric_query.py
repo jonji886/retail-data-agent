@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from app.agent.contracts import ErrorType, QueryPlan
+from app.agent.contracts import QueryPlan
 from app.tools.metric_query_tool import MetricQueryTool
 
 
