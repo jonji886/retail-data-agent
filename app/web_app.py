@@ -584,6 +584,10 @@ def render_ai_assistant() -> None:
         "哪些门店销售下降最明显？",
     ]
     st.caption("可以直接尝试：" + " · ".join(examples))
+    # 让首屏示例成为真实输入值，而不是仅作为灰色 placeholder 显示。
+    # 否则用户直接点击“开始分析”时 question 为空，页面会静默跳过请求。
+    if "agent_question" not in st.session_state:
+        st.session_state["agent_question"] = examples[1]
     question = st.text_input("请输入经营问题", key="agent_question", placeholder=examples[1])
     cols = st.columns(3)
     user_options = {
@@ -601,6 +605,8 @@ def render_ai_assistant() -> None:
     run_btn = cols[2].button("开始分析", type="primary")
     user_id, role, data_scope = user_options[user_label]
     should_run = bool(run_btn or st.session_state.pop("agent_auto_submit", False))
+    if should_run and not question.strip():
+        st.warning("请输入经营问题后再开始分析。")
     if should_run and question.strip():
         if "session_id" not in st.session_state:
             st.session_state["session_id"] = "st_" + uuid.uuid4().hex[:12]
