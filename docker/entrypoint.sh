@@ -34,3 +34,4 @@ exec streamlit run app/web_app.py \
     --server.headless=true \
     --server.fileWatcherType=none \
     --browser.gatherUsageStats=false
+
