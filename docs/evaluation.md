@@ -90,11 +90,11 @@ Executable Success Rate = 100%（27/27，仅统计期望执行的用例）
 
 ### LLM-enabled Evaluation（`run_llm_evaluation.py`）
 
-- 默认通过 DeepSeek 真实调用配置的固定模型构建 Query Plan；若配置 `OPENROUTER_API_KEY`，DeepSeek 超时/错误并完成有限重试后，同一调用最多切换一次 OpenRouter；两者都失败才进入确定性 fallback；
+- 默认通过硅基流动真实调用固定 `MAIN` 构建 Query Plan；确定性规则无法识别的请求才会先调用低成本 `ROUTER`，Main 超时/错误并完成有限重试后切换 `REASON`；Reason 失败才进入确定性 fallback。`VISION` 仅为未来多模态入口预留；
 - 强制使用 `DATA_SOURCE=postgresql` 的 Supabase PostgreSQL 数据源，覆盖 Query Plan → 权限 → Skill → 语义层 → 受控 SQL → Result 的公网近生产链路；若未配置 Supabase，脚本明确 SKIP 且不生成报告；
-- DeepSeek 默认使用 `deepseek-chat`，也可配置 `EVAL_LLM_MODEL` 覆盖；禁止使用 `openrouter/free`；
-- 报告记录：`provider`、`model`、`data_source=postgresql`、`evaluation_timestamp`、`case_count`、`pass_count`、`pass_rate`、`llm_calls`、`fallback_count`、`fallback_case_count`、`fallback_rate`、`latency_ms`、token usage 和 `estimated_cost`；`fallback_rate` 按发生过切换的用例数 / 总用例数计算；每条调用还记录实际 provider、`fallback_used`、`fallback_from` 与 `fallback_reason`；
-- 未配置 `DEEPSEEK_API_KEY` 时**明确 SKIP 且不生成报告**，禁止输出"0 calls / 100% pass"的误导结果；
+- Main 默认使用 `MAIN`，也可配置 `EVAL_LLM_MODEL` 固定评测模型；每条调用记录 `role` 与实际模型。
+- 报告记录：`provider`、`model`、`data_source=postgresql`、`evaluation_timestamp`、`case_count`、`pass_count`、`pass_rate`、`llm_calls`、`fallback_count`、`fallback_case_count`、`fallback_rate`、`latency_ms`、token usage 和 `estimated_cost`；`fallback_rate` 按发生过切换的用例数 / 总用例数计算；每条调用还记录实际 provider、`fallback_used`、`fallback_from_model`、`fallback_model` 与 `fallback_reason`；
+- 未配置 `SILICONFLOW_API_KEY` 时**明确 SKIP 且不生成报告**，禁止输出"0 calls / 100% pass"的误导结果；
 - 输出 `reports/llm_evaluation_report.json`。
 
 两条链路不混合：Deterministic Regression 是 GitHub Actions 的阻断门禁；Real

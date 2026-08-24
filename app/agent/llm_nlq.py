@@ -1,4 +1,4 @@
-"""使用配置的主 LLM Provider 解析自然语言，再交给确定性语义层执行。"""
+"""使用硅基流动模型解析自然语言，再交给确定性语义层执行。"""
 
 from __future__ import annotations
 
@@ -11,32 +11,46 @@ from typing import Any, Dict, Mapping
 from app.agent.nlq import DateRange, NLQError, NaturalLanguageQueryEngine, ParsedQuestion
 from app.data_sources.base import DataSourceBase
 from app.domain.time_range import resolve_relative_time
-from app.llm.openrouter_client import OpenRouterClient, OpenRouterConfig
+from app.llm.siliconflow_client import SiliconFlowClient, SiliconFlowConfig
 
 
 class LLMPlanError(NLQError):
     """大模型计划格式或内容不符合语义层约束。"""
 
 
-class OpenRouterNLQEngine:
+class SiliconFlowNLQEngine:
     def __init__(self, root: Path, data_source: DataSourceBase | None = None,
                  mode: str = "demo") -> None:
         self.root = root
         self.deterministic = NaturalLanguageQueryEngine(root, data_source=data_source)
-        self.config = OpenRouterConfig.from_env(root, mode=mode)
-        self.client = OpenRouterClient(self.config)
+        self.config = SiliconFlowConfig.from_env(root, mode=mode)
+        self.client = SiliconFlowClient(self.config)
 
     def parse(self, question: str) -> ParsedQuestion:
         """调用主 Provider 生成计划，再通过本地规则完成严格校验。"""
-        plan_json = self.client.complete_json(self._system_prompt(), question)
+        plan_json = self.client.complete_json(self._system_prompt(), question, role="main")
         try:
             plan = self._parse_json(plan_json)
         except LLMPlanError:
             # 结构化输出异常只允许一次补请求；之后由 Agent 回退到确定性解析。
             if self.config.max_retries <= 0:
                 raise
-            plan = self._parse_json(self.client.complete_json(self._system_prompt(), question))
+            retry_json = self.client.complete_json(self._system_prompt(), question, role="main")
+            try:
+                plan = self._parse_json(retry_json)
+            except LLMPlanError:
+                # Main 连续返回不合规结构时，才显式启用 Reason；Reason 的结果
+                # 仍会经过完全相同的本地白名单校验。
+                if not self.config.reason_model:
+                    raise
+                plan = self._parse_json(
+                    self.client.complete_json(self._system_prompt(), question, role="reason")
+                )
         return self._build_parsed_question(question, plan)
+
+    def route_intent(self, question: str) -> str:
+        """调用低成本 Router；结果只能作为意图提示，不能绕过本地校验。"""
+        return self.client.route_intent(question)
 
     def answer(self, question: str):
         parsed = self.parse(question)

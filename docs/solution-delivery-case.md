@@ -80,7 +80,7 @@ Business Insight
 Evidence / Audit / Evaluation
 ```
 
-设计原则是：**Probabilistic AI outside, deterministic execution inside.** DeepSeek 负责理解、结构化计划和自然语言表达；权限、指标公式、范围收窄、SQL 构造、执行和安全边界由确定性系统控制。OpenRouter 只作为可选故障切换，不改变执行边界。
+设计原则是：**Probabilistic AI outside, deterministic execution inside.** 硅基流动上的 Router 负责低成本意图提示，Main 负责结构化计划和自然语言表达，Reason 负责 Main 故障恢复，Vision 预留给多模态入口；权限、指标公式、范围收窄、SQL 构造、执行和安全边界由确定性系统控制。模型切换不改变执行边界。
 
 ## 5. 系统集成方案
 
@@ -104,7 +104,7 @@ User / Role / Data Scope
 
 ### LLM
 
-DeepSeek 仅承担 Intent understanding、Query Plan understanding、自然语言解释和推荐追问辅助生成。它不负责权限判断、任意 SQL 执行、指标公式定义或 Data Scope。
+Router 仅承担低成本 Intent hint；Main / Reason 承担 Query Plan understanding 与自然语言解释。Vision 只服务于未来多模态输入。它们都不负责权限判断、任意 SQL 执行、指标公式定义或 Data Scope。
 
 ## 6. PoC 范围
 

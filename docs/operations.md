@@ -13,16 +13,16 @@ Render 部署后，进入服务的 **Logs → Application logs**，搜索下面�
 | `agent_request_rejected` / `application_request_completed` | Demo quota 拒绝和 Application Service 返回结果 |
 | `http_query_completed` | FastAPI `/api/v1/query` 的 HTTP 返回状态和耗时 |
 | `report_request_started` / `completed` / `failed` | 报告生成入口及耗时 |
-| `llm_provider_request` | DeepSeek 或 OpenRouter 的每次实际请求、重试次数、HTTP 状态、错误类型、Token 与延迟 |
-| `llm_fallback_started` / `skipped` | DeepSeek 失败后的 OpenRouter 切换或未配置原因 |
+| `llm_provider_request` | 硅基流动每个模型的实际请求、重试次数、HTTP 状态、错误类型、Token 与延迟 |
+| `llm_fallback_started` / `skipped` | Main 失败后的 Reason 切换，或 Router/Vision 不适用的原因 |
 | `llm_request_completed` / `failed` | 一次 LLM 逻辑调用的最终 Provider、是否切换和最终错误 |
 
 日志只输出 `request_id`、`trace_id`、Provider、模型、错误类型、状态、耗时和 Token 统计，不输出问题正文、Prompt、API Key、Authorization、数据库连接串或查询结果。Render 免费实例休眠或重启后，历史日志的保留和检索能力以 Render 当前方案为准；需要长期留存时应接入外部日志系统。
 
 | Failure | Detection | Behaviour | User response | Trace/Audit |
 |---|---|---|---|---|
-| DeepSeek timeout / HTTP error | 客户端异常与超时 | 最多重试 `LLM_MAX_RETRIES`（0～2）；仍失败且配置 `OPENROUTER_API_KEY` 时，同一请求最多切换一次 OpenRouter；两个 Provider 都失败才确定性回退 | 优先返回 OpenRouter 结果，否则返回规则链路结果 | 记录实际 provider、model、`retry_count`、`fallback_used`、`fallback_from`、`fallback_reason` 与 `error_category` |
-| 429 / model unavailable | HTTP 异常类型或请求失败 | DeepSeek 有限重试后切换 OpenRouter；不无限循环；OpenRouter 失败后确定性回退 | 优先返回 fallback 结果，否则提示使用确定性结果 | 记录 Provider failover 和最终 fallback reason |
+| Main timeout / HTTP error | 客户端异常与超时 | 最多重试 `LLM_MAX_RETRIES`（0～2）；仍失败后切换 Reason；Reason 失败才确定性回退 | 优先返回 Main 或 Reason 的成功结果，否则返回规则链路结果 | 记录 role、实际 provider/model、`retry_count`、`fallback_used`、`fallback_from_model`、`fallback_model`、`fallback_reason` 与 `error_category` |
+| 429 / model unavailable | HTTP 异常类型或请求失败 | Main 有限重试后切换 Reason；不无限循环；Router 不承担文本 fallback | 优先返回 Reason 结果，否则提示使用确定性结果 | 记录模型 failover 和最终 fallback reason |
 | invalid JSON / structured output | JSON 与计划白名单校验失败 | 最多一次补请求，仍失败则走确定性解析 | 正常返回或明确拒答 | 记录 `LLMPlanError` 类型 |
 | quota exceeded | session/IP/global 计数器 | 在调用 LLM 前停止请求 | 提示 Demo 额度已用尽 | `quota_exceeded`，不产生 LLM call |
 | PostgreSQL unavailable | `/ready` 或数据源健康检查失败 | API 快速失败；不执行 Skill | 提示数据源暂不可用 | 记录 `DATA_SOURCE_UNAVAILABLE` |

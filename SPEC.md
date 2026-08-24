@@ -3,7 +3,7 @@
 ```
 Status: MVP
 Version: v1.0.0
-Last verified: 2026-08-21
+Last verified: 2026-08-24
 ```
 
 > 本文件描述当前已实现的 MVP 产品范围与验收标准，与 README / 代码 / 评测报告保持一致。
@@ -41,7 +41,7 @@ Last verified: 2026-08-21
 
 - 有状态编排图：`parse_request → policy_check → execute_skill → validate_result → generate_answer`，含 unsupported / denied / error 分支。
 - 查询计划（Query Plan）：intent / metric / dimensions / filters / time range / comparison 的结构化中间产物。
-- 双链路解析：确定性基线（NLQ Engine）+ DeepSeek LLM 增强（需 `DEEPSEEK_API_KEY`）；DeepSeek 按有限重试仍超时/报错时，若配置 `OPENROUTER_API_KEY`，同一请求最多切换一次 OpenRouter，两个 Provider 都失败后回退到确定性链路，并记录主/实际 provider、model、fallback 原因。
+- 双链路解析：确定性基线（NLQ Engine）+ 硅基流动 LLM 增强（需 `SILICONFLOW_API_KEY`）；Router 仅为无法确定的意图提供低成本提示，Main 负责计划与回答，Main 按有限重试仍失败或输出不合规时切换 Reason，全部失败后回退到确定性链路；Vision 预留给多模态入口，并记录角色、实际 model 与 fallback 原因。
 
 ### 4.2 语义层与工具
 
@@ -69,8 +69,8 @@ Last verified: 2026-08-21
 
 - Golden Dataset：`configs/evaluation/golden_questions.json`，35 个用例，覆盖 9 类场景（normal / expression / trend / attribution / anomaly / report / boundary / permission / security）。
 - Evaluation 2.0：分层指标（Plan Accuracy、Executable Success Rate、Result Accuracy、Unsupported Reject Rate、Permission Safety Pass Rate、Security Defense Rate、Overall Pass Rate）。
-- LLM E2E 评测：默认真实调用 DeepSeek 固定模型，并使用 Supabase PostgreSQL 验证公网近生产执行链路；可选配置 `OPENROUTER_API_KEY` 用于 DeepSeek 超时/错误时的跨 Provider fallback。记录 primary/actual provider、model、data_source、llm_calls 和 fallback，未配置 Supabase、DeepSeek Key 或固定模型时明确 SKIP 且不生成报告。
-- Demo / Evaluation 模型配置分离：Demo 默认使用 `DEEPSEEK_MODEL=deepseek-chat`，Evaluation 可使用 `EVAL_LLM_MODEL` 覆盖但不能使用 `openrouter/free`。
+- LLM E2E 评测：默认通过硅基流动调用固定 Main 模型，并使用 Supabase PostgreSQL 验证公网近生产执行链路；Main 失败后尝试 Reason。记录 primary/actual provider、role、model、data_source、llm_calls 和 fallback，未配置 Supabase、硅基流动 Key 或固定 Main 模型时明确 SKIP 且不生成报告。
+- Demo / Evaluation 模型配置分离：Demo 使用 `ROUTER`、`MAIN`、`REASON`、`VISION`；Evaluation 可使用 `EVAL_LLM_MODEL` 固定 Main 评测模型。旧版 `MODEL_*` 与三变量仅作兼容读取。
 - API Boundary：FastAPI 提供 `/api/v1/query`、`/health`、`/ready`，与 Streamlit 共享 Application Service。
 - Demo quota：session/IP/global daily quota 在 LLM 请求前执行；Operational Metrics 记录请求、成功、失败、延迟、fallback、权限和数据源。
 - 相对时间策略：`过去/最近/近 N 个月`、自然月和滚动天数由 `app/domain/time_range.py` 统一解析，LLM 计划不能覆盖该规则。
@@ -90,7 +90,7 @@ Last verified: 2026-08-21
 ### 4.7 数据源与部署
 
 - `scripts/init_postgres.py` 完成 PostgreSQL/Supabase 的 schema creation、Demo data import、views、indexes 和 validation。
-- Render 配置支持 `DATA_SOURCE=postgresql`、`DATABASE_URL`、DeepSeek 主 Provider、可选 OpenRouter fallback 和 Demo quota；启动前执行语义层与数据源健康检查。
+- Render 配置支持 `DATA_SOURCE=postgresql`、`DATABASE_URL`、硅基流动四角色模型配置和 Demo quota；启动前执行语义层与数据源健康检查。
 
 ### 4.8 数据
 
@@ -133,7 +133,7 @@ Last verified: 2026-08-21
 2. `Golden Dataset 数量（35）== README 描述 == 评测报告 total`；
 3. `Web Demo Tab 数量（6）== README 描述 == web_app.py 实际`；
 4. `Overall Pass Rate` 与 `Executable Success Rate` 口径可解释、不冲突；
-5. 全部单元测试通过（当前 19 文件 / 120 用例）；
+5. 全部单元测试通过（当前 20 文件 / 123 用例）；
 6. 任何指标或能力声明都能在代码 / 测试 / 报告中找到证据。
 
 ## 9. Future（Out of Scope，未实现不宣传）

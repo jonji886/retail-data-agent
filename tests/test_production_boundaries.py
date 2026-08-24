@@ -14,7 +14,7 @@ from app.agent.state import new_state
 from app.application import AgentApplicationService
 from app.config import DataSourceConfig
 from app.data_sources.postgresql import PostgreSQLDataSource
-from app.llm.openrouter_client import OpenRouterConfig, OpenRouterClient
+from app.llm.siliconflow_client import SiliconFlowConfig, SiliconFlowClient
 from app.observability.quota import DemoQuota, QuotaConfig
 from app.observability.runtime_logging import log_event, request_log_context
 
@@ -66,11 +66,11 @@ class QuotaTest(unittest.TestCase):
 
 class LLMRetryTest(unittest.TestCase):
     def test_client_retries_once_and_records_retry_count(self) -> None:
-        config = OpenRouterConfig(
+        config = SiliconFlowConfig(
             api_key="test", max_retries=1,
-            fallback_models=("fallback/one", "fallback/two"),
+            model="main/model", reason_model="reason/model",
         )
-        client = OpenRouterClient(config)
+        client = SiliconFlowClient(config)
         response = Mock()
         response.choices = [Mock(message=Mock(content='{"ok": true}'))]
         response.usage = None
@@ -78,56 +78,79 @@ class LLMRetryTest(unittest.TestCase):
             self.assertEqual(client.complete_json("system", "user"), '{"ok": true}')
         self.assertEqual(call.call_count, 2)
         self.assertEqual(client.last_call_metadata["retry_count"], 1)
-        self.assertEqual(call.call_args.kwargs["extra_body"], {"models": ["fallback/one", "fallback/two"]})
+        self.assertEqual(call.call_args.kwargs["model"], "main/model")
 
-    def test_openrouter_error_fails_over_to_deepseek(self) -> None:
-        config = OpenRouterConfig(
-            api_key="openrouter-test", max_retries=0,
-            deepseek_api_key="deepseek-test", deepseek_model="deepseek-chat",
+    def test_main_model_fails_over_to_reason(self) -> None:
+        config = SiliconFlowConfig(
+            api_key="siliconflow-test", max_retries=0,
+            model="main/model", reason_model="reason/model",
         )
-        client = OpenRouterClient(config)
+        client = SiliconFlowClient(config)
         response = Mock()
         response.choices = [Mock(message=Mock(content='{"ok": true}'))]
         response.usage = None
-        with patch.object(client._client.chat.completions, "create", side_effect=RuntimeError("timeout")):
-            with patch.object(client._deepseek_client.chat.completions, "create", return_value=response) as fallback_call:
-                self.assertEqual(client.complete_json("system", "user"), '{"ok": true}')
-        self.assertEqual(fallback_call.call_args.kwargs["model"], "deepseek-chat")
-        self.assertEqual(client.last_call_metadata["provider"], "deepseek")
+        with patch.object(client._client.chat.completions, "create", side_effect=[RuntimeError("timeout"), response]) as call:
+            self.assertEqual(client.complete_json("system", "user"), '{"ok": true}')
+        self.assertEqual(call.call_args.kwargs["model"], "reason/model")
+        self.assertEqual(client.last_call_metadata["provider"], "siliconflow")
         self.assertTrue(client.last_call_metadata["fallback_used"])
-        self.assertEqual(client.last_call_metadata["fallback_from"], "openrouter")
+        self.assertEqual(client.last_call_metadata["fallback_from_model"], "main/model")
+        self.assertEqual(client.last_call_metadata["role"], "reason")
 
-    def test_deepseek_configuration_is_loaded_without_exposing_key(self) -> None:
+    def test_four_model_roles_are_loaded_without_exposing_key(self) -> None:
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
-            "LLM_PROVIDER": "openrouter",
-            "OPENROUTER_API_KEY": "openrouter-test",
-            "DEEPSEEK_API_KEY": "deepseek-test",
-            "DEEPSEEK_MODEL": "deepseek-chat",
+            "LLM_PROVIDER": "siliconflow",
+            "SILICONFLOW_API_KEY": "siliconflow-test",
+            "ROUTER": "router/model",
+            "MAIN": "main/model",
+            "REASON": "reason/model",
+            "VISION": "vision/model",
         }, clear=True):
-            config = OpenRouterConfig.from_env(Path(directory))
-        self.assertEqual(config.deepseek_model, "deepseek-chat")
-        self.assertEqual(config.deepseek_api_key, "deepseek-test")
+            config = SiliconFlowConfig.from_env(Path(directory))
+        self.assertEqual(config.router_model, "router/model")
+        self.assertEqual(config.main_model, "main/model")
+        self.assertEqual(config.reason_model, "reason/model")
+        self.assertEqual(config.vision_model, "vision/model")
+        self.assertEqual(config.model_for("main"), "main/model")
+        self.assertEqual(config.model_for("vision"), "vision/model")
 
-    def test_parses_openrouter_fallback_models(self) -> None:
+    def test_legacy_model_variables_still_map_to_main_and_reason(self) -> None:
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
-            "LLM_PROVIDER": "openrouter",
-            "OPENROUTER_API_KEY": "test-key",
-            "OPENROUTER_MODEL": "provider/primary",
-            "OPENROUTER_FALLBACK_MODELS": "provider/one, provider/two, provider/one",
+            "LLM_PROVIDER": "siliconflow",
+            "SILICONFLOW_API_KEY": "test-key",
+            "MODEL_DEEPSEEK": "provider/primary",
+            "MODEL_QWEN": "provider/one",
+            "MODEL_GLM": "provider/two",
         }, clear=True):
-            config = OpenRouterConfig.from_env(Path(directory))
+            config = SiliconFlowConfig.from_env(Path(directory))
         self.assertEqual(config.model, "provider/primary")
-        self.assertEqual(config.fallback_models, ("provider/one", "provider/two"))
+        self.assertEqual(config.main_model, "provider/primary")
+        self.assertEqual(config.reason_model, "provider/one")
+        self.assertEqual(config.fallback_models, ("provider/one",))
 
-    def test_evaluation_model_cannot_use_free_router(self) -> None:
+    def test_evaluation_requires_explicit_main_model(self) -> None:
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
-            "LLM_PROVIDER": "openrouter",
-            "OPENROUTER_API_KEY": "test-key",
-            "EVAL_LLM_MODEL": "openrouter/free",
+            "LLM_PROVIDER": "siliconflow",
+            "SILICONFLOW_API_KEY": "test-key",
+            "EVAL_LLM_MODEL": "",
         }, clear=True):
-            self.assertFalse(OpenRouterConfig.is_configured(Path(directory), mode="evaluation"))
-            with self.assertRaisesRegex(RuntimeError, "固定的具体模型"):
-                OpenRouterConfig.from_env(Path(directory), mode="evaluation")
+            self.assertFalse(SiliconFlowConfig.is_configured(Path(directory), mode="evaluation"))
+            with self.assertRaisesRegex(RuntimeError, "固定的具体 Main 模型"):
+                SiliconFlowConfig.from_env(Path(directory), mode="evaluation")
+
+    def test_router_returns_intent_and_records_role(self) -> None:
+        config = SiliconFlowConfig(
+            api_key="siliconflow-test", max_retries=0,
+            router_model="router/model", model="main/model",
+        )
+        client = SiliconFlowClient(config)
+        response = Mock()
+        response.choices = [Mock(message=Mock(content='{"intent":"trend_analysis"}'))]
+        response.usage = None
+        with patch.object(client._client.chat.completions, "create", return_value=response):
+            self.assertEqual(client.route_intent("销售额趋势"), "trend_analysis")
+        self.assertEqual(client.last_call_metadata["role"], "router")
+        self.assertEqual(client.last_call_metadata["model"], "router/model")
 
 
 class RuntimeLoggingTest(unittest.TestCase):
@@ -136,7 +159,7 @@ class RuntimeLoggingTest(unittest.TestCase):
             with request_log_context(request_id="req_test", trace_id="trace_test", surface="test"):
                 log_event(
                     "llm_provider_request",
-                    provider="openrouter",
+                    provider="siliconflow",
                     input_tokens=12,
                     api_key="do-not-log",
                     question="do-not-log",

@@ -36,7 +36,7 @@ def generate_answer(state: AgentState) -> AgentState:
     if use_llm:
         if not _llm_available(root, llm_mode):
             llm_calls.append({
-                "provider": "deepseek", "node": "generate_answer",
+                "provider": "siliconflow", "role": "main", "node": "generate_answer",
                 "status": "fallback", "model": _configured_model(root, llm_mode),
                 "fallback_model": "deterministic", "reason": "provider_not_configured",
             })
@@ -48,7 +48,8 @@ def generate_answer(state: AgentState) -> AgentState:
                 if llm_answer:
                     answer = llm_answer
                     llm_calls.append({
-                        "provider": metadata.get("provider", "deepseek"),
+                        "provider": metadata.get("provider", "siliconflow"),
+                        "role": metadata.get("role", "main"),
                         "node": "generate_answer",
                         "status": "success", "model": metadata.get("model", _configured_model(root, llm_mode)),
                         "prompt_version": "v1",
@@ -57,13 +58,16 @@ def generate_answer(state: AgentState) -> AgentState:
             except Exception as exc:  # noqa: BLE001
                 metadata = getattr(exc, "llm_metadata", {})
                 llm_calls.append({
-                    "provider": metadata.get("provider", "deepseek"),
+                    "provider": metadata.get("provider", "siliconflow"),
+                    "role": metadata.get("role", "main"),
                     "node": "generate_answer",
                     "status": "fallback", "model": metadata.get("model", _configured_model(root, llm_mode)),
                     "fallback_model": "deterministic", "reason": type(exc).__name__,
                     "fallback_used": metadata.get("fallback_used", False),
                     "fallback_attempted": metadata.get("fallback_attempted", False),
-                    "fallback_provider": metadata.get("fallback_from") or metadata.get("fallback_provider"),
+                    "fallback_provider": metadata.get("fallback_provider"),
+                    "fallback_from_model": metadata.get("fallback_from_model") or metadata.get("fallback_from"),
+                    "provider_fallback_model": metadata.get("fallback_model"),
                     "fallback_reason": metadata.get("fallback_reason") or metadata.get("fallback_error_type"),
                 })
                 # LLM 失败时使用模板回答
@@ -87,21 +91,21 @@ def generate_answer(state: AgentState) -> AgentState:
 
 
 def _llm_available(root: Path, mode: str = "demo") -> bool:
-    from app.llm.openrouter_client import OpenRouterConfig
-    return OpenRouterConfig.is_configured(root, mode=mode)
+    from app.llm.siliconflow_client import SiliconFlowConfig
+    return SiliconFlowConfig.is_configured(root, mode=mode)
 
 
 def _configured_model(root: Path, mode: str = "demo") -> str:
-    from app.llm.openrouter_client import provider_status
-    return str(provider_status(root).get("model", "deepseek-chat"))
+    from app.llm.siliconflow_client import provider_status
+    return str(provider_status(root).get("model", ""))
 
 
 def _llm_summarize(root: Path, intent: str, result: Dict[str, Any],
                    question: str, template: str, mode: str = "demo") -> tuple[str, Dict[str, Any]]:
-    """使用 OpenRouter 基于已提供的事实生成总结。"""
-    from app.llm.openrouter_client import OpenRouterClient, OpenRouterConfig
+    """使用硅基流动基于已提供的事实生成总结。"""
+    from app.llm.siliconflow_client import SiliconFlowClient, SiliconFlowConfig
     import json
-    client = OpenRouterClient(OpenRouterConfig.from_env(root, mode=mode))
+    client = SiliconFlowClient(SiliconFlowConfig.from_env(root, mode=mode))
     system_prompt = (
         "你是零售经营分析 Data Agent 的回答生成器。\n"
         "只能基于用户提供的已验证 JSON 事实生成中文总结，"
@@ -113,7 +117,7 @@ def _llm_summarize(root: Path, intent: str, result: Dict[str, Any],
     facts = json.dumps({"intent": intent, "question": question, "result": _safe_result(result)},
                        ensure_ascii=False, default=str)
     try:
-        answer = client.complete_text(system_prompt, facts, max_tokens=600)
+        answer = client.complete_text(system_prompt, facts, max_tokens=600, role="main")
     except Exception as exc:  # noqa: BLE001
         # 将 Provider failover 的最终审计元数据带回节点，避免双 Provider
         # 都失败时只看到一个笼统的 deterministic fallback。

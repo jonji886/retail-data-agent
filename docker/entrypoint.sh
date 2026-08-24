@@ -19,8 +19,8 @@ fi
 python scripts/validate_startup.py
 
 # 仅打印不含密钥的运行状态，便于 Render 日志确认实际 Provider，避免把
-# Dashboard 中配置的凭证存在性误认为当前进程已经使用了 DeepSeek。
-python -c 'from pathlib import Path; from app.llm.openrouter_client import provider_status; print("[data-agent] LLM status: %s" % provider_status(Path("/app")))' \
+# Dashboard 中配置的凭证存在性误认为当前进程已经使用了首选模型。
+python -c 'from pathlib import Path; from app.llm.siliconflow_client import provider_status; print("[data-agent] LLM status: %s" % provider_status(Path("/app")))' \
     || echo "[data-agent] Unable to inspect LLM provider status"
 
 API_PORT_VALUE="${API_PORT:-8000}"
@@ -34,4 +34,3 @@ exec streamlit run app/web_app.py \
     --server.headless=true \
     --server.fileWatcherType=none \
     --browser.gatherUsageStats=false
-

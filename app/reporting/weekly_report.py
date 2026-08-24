@@ -12,7 +12,7 @@ from app.analytics.anomaly import Anomaly, SalesAnomalyDetector
 from app.analytics.attribution import AttributionResult, SalesAttributor
 from app.data_sources.base import DataSourceBase
 from app.data_sources.factory import create_data_source
-from app.llm.openrouter_client import OpenRouterClient
+from app.llm.siliconflow_client import SiliconFlowClient
 
 
 def _month_range(month: str) -> Tuple[date, date]:
@@ -240,7 +240,7 @@ class RetailReportBuilder:
         return "\n".join(lines)
 
     @staticmethod
-    def to_openrouter_markdown(context: ReportContext, client: OpenRouterClient) -> str:
+    def to_siliconflow_markdown(context: ReportContext, client: SiliconFlowClient) -> str:
         system_prompt = (
             "你是企业经营分析报告撰写助手。根据用户提供的已验证 JSON 数据生成中文 Markdown 月报。\n"
             "只使用输入中的数字和事实，不得改写、补充或猜测任何数据。\n"
@@ -250,4 +250,4 @@ class RetailReportBuilder:
             "只返回 Markdown 正文，不要返回代码块或解释。"
         )
         user_prompt = json.dumps(context.as_dict(), ensure_ascii=False, indent=2)
-        return client.complete_text(system_prompt, user_prompt, max_tokens=2400)
+        return client.complete_text(system_prompt, user_prompt, max_tokens=2400, role="main")

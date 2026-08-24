@@ -36,7 +36,7 @@ TESTS_DIR = ROOT / "tests"
 
 # README Project Status 块中允许的键（单一事实来源）
 STATUS_KEYS = (
-    "Version", "Last verified", "Primary LLM Provider", "Golden cases", "Evaluation cases", "Demo scenarios",
+    "Version", "Last verified", "Primary LLM Model", "Golden cases", "Evaluation cases", "Demo scenarios",
     "Web tabs", "Unit test files", "Unit tests",
 )
 
@@ -220,16 +220,18 @@ def main() -> int:
         print("  OK: README Web tabs 与 web_app.py 一致")
 
     # 4b. Provider 默认值：配置、README 与主客户端必须一致。
-    print("4b) Primary LLM Provider:")
+    print("4b) Primary LLM Model:")
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
     provider_match = re.search(r"^LLM_PROVIDER=(\S+)", env_example, re.MULTILINE)
     default_provider = provider_match.group(1).lower() if provider_match else ""
-    if default_provider != "deepseek" or status.get("Primary LLM Provider") != "DeepSeek":
-        print("  [FAIL] 默认 Provider 应为 DeepSeek（env=%s, README=%s）" % (
-            default_provider, status.get("Primary LLM Provider")))
-        errors.append("Primary LLM Provider 漂移")
+    required_roles = ("ROUTER", "MAIN", "REASON", "VISION")
+    missing_roles = [role for role in required_roles if not re.search(r"^%s=\S+" % role, env_example, re.MULTILINE)]
+    if default_provider != "siliconflow" or status.get("Primary LLM Model") != "DeepSeek（硅基流动）" or missing_roles:
+        print("  [FAIL] SiliconFlow 四角色配置或默认模型不一致（provider=%s, README=%s, missing=%s）" % (
+            default_provider, status.get("Primary LLM Model"), missing_roles))
+        errors.append("Primary LLM Model 漂移")
     else:
-        print("  OK: DeepSeek 为默认主 Provider，OpenRouter 仅作可选 fallback")
+        print("  OK: SiliconFlow ROUTER/MAIN/REASON/VISION 配置存在，MAIN 为默认主力模型")
 
     # 5. LLM 报告可信度
     print("5) LLM evaluation report:")

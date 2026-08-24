@@ -5,14 +5,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from app.agent.llm_nlq import LLMPlanError, OpenRouterNLQEngine
-from app.llm.openrouter_client import OpenRouterConfig
+from app.agent.llm_nlq import LLMPlanError, SiliconFlowNLQEngine
+from app.llm.siliconflow_client import SiliconFlowConfig
 
 
 class LLMPlanValidationTest(unittest.TestCase):
     def setUp(self) -> None:
         # 绕开 API 客户端，仅测试模型输出的计划校验。
-        self.engine = object.__new__(OpenRouterNLQEngine)
+        self.engine = object.__new__(SiliconFlowNLQEngine)
         self.engine.root = Path(".")
         from app.agent.nlq import NaturalLanguageQueryEngine
         self.engine.deterministic = NaturalLanguageQueryEngine(Path("."))
@@ -74,13 +74,36 @@ class LLMPlanValidationTest(unittest.TestCase):
         self.assertEqual(parsed.metric.name, "sales_amount")
         self.engine.client.complete_json.assert_called_once()
 
+    def test_invalid_main_output_uses_reason_after_one_main_retry(self) -> None:
+        valid = json.dumps({
+            "metric": "sales_amount",
+            "dimensions": [],
+            "filters": {},
+            "time_grain": "month",
+            "start_date": "2025-11-01",
+            "end_date": "2025-11-30",
+            "comparison": None,
+            "clarification": None,
+        })
+        self.engine.config = SiliconFlowConfig(
+            api_key="test", model="main/model", reason_model="reason/model", max_retries=1,
+        )
+        self.engine.client = Mock()
+        self.engine.client.complete_json.side_effect = ["not-json", "still-not-json", valid]
+        parsed = self.engine.parse("2025年11月销售额")
+        self.assertEqual(parsed.metric.name, "sales_amount")
+        self.assertEqual(
+            [call.kwargs["role"] for call in self.engine.client.complete_json.call_args_list],
+            ["main", "main", "reason"],
+        )
 
-class OpenRouterConfigTest(unittest.TestCase):
+
+class SiliconFlowConfigTest(unittest.TestCase):
     def test_evaluation_engine_loads_pinned_evaluation_config(self) -> None:
         config = Mock()
-        with patch("app.agent.llm_nlq.OpenRouterConfig.from_env", return_value=config) as load, \
-             patch("app.agent.llm_nlq.OpenRouterClient"):
-            engine = OpenRouterNLQEngine(Path("."), mode="evaluation")
+        with patch("app.agent.llm_nlq.SiliconFlowConfig.from_env", return_value=config) as load, \
+             patch("app.agent.llm_nlq.SiliconFlowClient"):
+            engine = SiliconFlowNLQEngine(Path("."), mode="evaluation")
         load.assert_called_once_with(Path("."), mode="evaluation")
         self.assertIs(engine.config, config)
 
@@ -88,23 +111,23 @@ class OpenRouterConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             with patch.dict(os.environ, {}, clear=True):
-                self.assertFalse(OpenRouterConfig.is_configured(root))
+                self.assertFalse(SiliconFlowConfig.is_configured(root))
             with patch.dict(os.environ, {
-                "LLM_PROVIDER": "openrouter",
-                "OPENROUTER_API_KEY": "test-key",
+                "LLM_PROVIDER": "deepseek",
+                "SILICONFLOW_API_KEY": "test-key",
             }, clear=True):
-                self.assertTrue(OpenRouterConfig.is_configured(root))
+                self.assertTrue(SiliconFlowConfig.is_configured(root))
 
     def test_invalid_numeric_config_is_reported_as_runtime_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             with patch.dict(os.environ, {
-                "LLM_PROVIDER": "openrouter",
-                "OPENROUTER_API_KEY": "test-key",
-                "OPENROUTER_TIMEOUT_SECONDS": "invalid",
+                "LLM_PROVIDER": "deepseek",
+                "SILICONFLOW_API_KEY": "test-key",
+                "LLM_TIMEOUT_SECONDS": "invalid",
             }, clear=True):
                 with self.assertRaisesRegex(RuntimeError, "TIMEOUT_SECONDS"):
-                    OpenRouterConfig.from_env(root)
+                    SiliconFlowConfig.from_env(root)
 
 
 if __name__ == "__main__":

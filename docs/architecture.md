@@ -63,7 +63,7 @@ FastAPI API ──┘                                  ↓
                                                    ↓
                               DataSourceBase → DuckDB / PostgreSQL
 
-LLM：Application Service → DeepSeek 主 Provider → OpenRouter 可选故障切换 → 确定性 fallback
+LLM：Application Service → 硅基流动 → Router（必要时）→ Main → Reason → 确定性 fallback；Vision 由多模态入口显式选择
 横切：Trace / Audit / Metrics / Quota / Retry / Fallback / Evaluation
 ```
 
@@ -178,12 +178,11 @@ PostgreSQL 由连接参数提供 statement timeout；DuckDB 当前提供资源�
 ### 两条链路
 
 - Deterministic Baseline：`scripts/run_evaluation.py`（无 API Key 可运行）
-- LLM E2E：`scripts/run_llm_evaluation.py`（默认通过 DeepSeek 固定 `EVAL_LLM_MODEL`，使用 Supabase PostgreSQL；可选 `OPENROUTER_API_KEY` 故障切换；无 Supabase / DeepSeek Key / 固定模型则 skip）
+- LLM E2E：`scripts/run_llm_evaluation.py`（通过硅基流动调用固定 Main 模型，使用 Supabase PostgreSQL；Main 失败后切换 Reason；无 Supabase / SiliconFlow Key / 固定 Main 模型则 skip）
 
-DeepSeek 通过 OpenAI-compatible Chat Completions 接口调用。主 Provider 按
-`LLM_MAX_RETRIES` 有限重试仍超时或报错时，如果配置了 `OPENROUTER_API_KEY`，客户端对
-同一请求最多切换一次 OpenRouter（默认 `https://api.deepseek.com`、`deepseek-chat`）。
-两个 Provider 都失败时，或结构化输出经最多一次补请求仍非法时，回退到确定性基线。
+硅基流动通过 OpenAI-compatible Chat Completions 接口调用。Router 只在确定性规则无法识别意图时提供受限枚举提示；Main 按
+`LLM_MAX_RETRIES` 有限重试仍超时或报错时切换 Reason。Reason 失败，或结构化输出经最多一次补请求仍非法时，回退到确定性基线。
+Vision 只由未来多模态入口显式选择，不参与普通文本 fallback。
 无论由哪个 Provider 生成计划，都必须经过本地计划校验、相对时间策略、RBAC、语义层
 和只读 SQL 执行器；Provider failover 不会绕过这些边界。
 回答润色同样只能使用已校验结果，不承担指标计算或权限判断。
@@ -220,8 +219,8 @@ Demo Badcase（`bc_demo_001`）：
 每次 Agent Run 生成 `request_id` + `trace_id`，记录每个节点的：
 - node / start_at / end_at / latency_ms / status / error
 
-LLM 调用记录：provider / model / latency / retry_count / status / token usage / prompt_version；
-跨 Provider 切换额外记录 `fallback_used`、`fallback_from`、`fallback_reason`（不记录 API Key）。
+LLM 调用记录：provider / role / model / latency / retry_count / status / token usage / prompt_version；
+模型切换额外记录 `fallback_used`、`fallback_from_model`、`fallback_model`、`fallback_reason`（不记录 API Key）。
 
 Tool 调用记录：tool_name / latency / status / error_type。
 

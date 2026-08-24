@@ -17,22 +17,18 @@ services:
       - key: STREAMLIT_SERVER_FILE_WATCHER_TYPE
         value: none
       - key: LLM_PROVIDER
-        value: deepseek
-      - key: DEEPSEEK_API_KEY
+        value: siliconflow
+      - key: SILICONFLOW_API_KEY
         sync: false
-      - key: DEEPSEEK_BASE_URL
-        value: https://api.deepseek.com
-      - key: DEEPSEEK_MODEL
-        value: deepseek-chat
-      - key: LLM_FALLBACK_PROVIDER
-        value: openrouter
-      - key: OPENROUTER_API_KEY
+      - key: SILICONFLOW_BASE_URL
+        value: https://api.siliconflow.cn/v1
+      - key: ROUTER
         sync: false
-      - key: OPENROUTER_BASE_URL
-        value: https://openrouter.ai/api/v1
-      - key: OPENROUTER_MODEL
-        value: openrouter/free
-      - key: OPENROUTER_FALLBACK_MODELS
+      - key: MAIN
+        value: deepseek-ai/DeepSeek-V4-Flash
+      - key: REASON
+        value: Pro/zai-org/GLM-5.1
+      - key: VISION
         sync: false
       - key: LLM_MODEL
         sync: false
@@ -40,7 +36,7 @@ services:
         sync: false
       - key: LLM_TIMEOUT_SECONDS
         value: "60"
-      - key: OPENROUTER_MAX_TOKENS
+      - key: LLM_MAX_TOKENS
         value: "1200"
       - key: LLM_MAX_RETRIES
         value: "1"
@@ -56,7 +52,3 @@ services:
         value: "20"
       - key: DEMO_GLOBAL_DAILY_LIMIT
         value: "40"
-      - key: OPENROUTER_HTTP_REFERER
-        value: https://retail-data-agent.onrender.com
-      - key: OPENROUTER_APP_TITLE
-        value: Retail Data Agent

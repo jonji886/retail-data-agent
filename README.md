@@ -67,7 +67,7 @@ LLM / 规则理解：查询计划（`intent`、指标、维度、筛选、时间
 | 确定性回归 | 35 个 Golden 用例，35/35 通过 |
 | 真实 LLM 端到端评测 | Supabase PostgreSQL 上 34/35 通过；详见[评测](#evaluation) |
 | 治理边界 | RBAC + 数据范围、语义层、只读 SQL 守卫、追踪 + 审计 |
-| 公网部署 | Render + Supabase PostgreSQL + DeepSeek（OpenRouter 可选 fallback；低流量作品集演示） |
+| 公网部署 | Render + Supabase PostgreSQL + 硅基流动（Router → Main → Reason；Vision 预留） |
 | CI | [![CI](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml)；静态检查、单测、确定性回归、一致性检查与冒烟测试 |
 
 <details>
@@ -76,15 +76,15 @@ LLM / 规则理解：查询计划（`intent`、指标、维度、筛选、时间
 ```text
 Status: MVP
 Version: v1.0.0
-Last verified: 2026-08-21
-Primary LLM Provider: DeepSeek
+Last verified: 2026-08-24
+Primary LLM Model: DeepSeek（硅基流动）
 
 Golden cases: 35
 Evaluation cases: 35
 Demo scenarios: 4
 Web tabs: 3
-Unit test files: 19
-Unit tests: 120
+Unit test files: 20
+Unit tests: 125
 ```
 
 </details>
@@ -135,7 +135,7 @@ DataSourceBase ◀─────┘
 | 权限边界 | [策略模块](app/tools/permission.py) 在 SQL 前执行 RBAC + 数据范围注入；越权不调用业务工具 |
 | SQL 安全 | [ReadOnlySQLRunner](app/tools/sql_runner.py) 仅允许单条 SELECT，拦截写操作、外部访问与危险路径，限制行数/资源 |
 | 数据源抽象 | [`DataSourceBase`](app/data_sources/base.py) + [DuckDB](app/data_sources/duckdb.py) + [PostgreSQL/Supabase](app/data_sources/postgresql.py) |
-| LLM 可靠性 | [Provider 客户端](app/llm/openrouter_client.py)：DeepSeek 主 Provider、有限重试、可选 OpenRouter fallback、确定性回退 |
+| LLM 可靠性 | [硅基流动客户端](app/llm/siliconflow_client.py)：Router / Main / Reason / Vision 角色、有限重试、确定性回退 |
 | 可观测与审计 | [追踪状态](app/agent/state.py) 记录逐节点状态/耗时；[审计](app/quality/audit.py) 记录问题、计划、工具、结果与状态 |
 | 质量门禁 | [35 个 Golden 用例](configs/evaluation/golden_questions.json)、[评测脚本](scripts/run_evaluation.py)、[一致性校验](scripts/verify_project_consistency.py) 和 CI |
 | API 与演示边界 | [FastAPI](app/api.py) `/api/v1/query`、`/health`、`/ready` 与 [Streamlit](app/web_app.py) 共用应用服务；演示额度在 LLM 调用前生效 |
@@ -183,27 +183,27 @@ DataSourceBase ◀─────┘
 
 ### 真实 LLM 端到端评测
 
-运行于 2026-08-21，报告：[`reports/llm_evaluation_report.json`](reports/llm_evaluation_report.json)。新的评测默认以 DeepSeek 固定模型发起，并在 `DATA_SOURCE=postgresql` 下执行完整链路；仓库中的历史报告保留其生成时的 Provider 记录。
+运行于 2026-08-24，报告：[`reports/llm_evaluation_report.json`](reports/llm_evaluation_report.json)。本次评测以固定 Main 模型发起，并在 `DATA_SOURCE=postgresql` 下执行完整链路；报告同时记录 Router、Main、Reason、Vision 角色配置和实际调用模型。
 
 | 指标 | 真实结果 |
 | --- | --- |
 | 数据源 | Supabase PostgreSQL |
 | 测试集 | 35 个 Golden 用例 |
-| 通过数 | 34/35 |
-| 总体通过率 | 97.1% |
+| 通过数 | 35/35 |
+| 总体通过率 | 100% |
 | 计划准确率 | 100% |
-| 可执行用例成功率 | 96.3%（26 / 27） |
-| LLM 调用 | 53 次（均为成功调用） |
-| 服务商故障切换 | 53 次调用；29 / 35 个用例（82.9%） |
-| 耗时 / Token | 总计 461.5 秒 / 43,951 Token |
+| 可执行用例成功率 | 100%（27 / 27） |
+| LLM 调用 | 56 次 |
+| 服务商故障切换 | 3 / 35 个用例（8.6%） |
+| 耗时 / Token | 总计 850.2 秒 / 58,225 Token |
 
-历史报告中的 OpenRouter 主模型请求曾受 `RateLimitError` 影响，成功调用均记录为 DeepSeek 服务商故障切换；因此上表是**历史真实端到端链路结果**，不应解读为当前 DeepSeek 主模型的准确率。重新运行评测后，报告会分别记录 `primary_provider`、`actual_provider` 和 fallback。
+上表是当前硅基流动四角色配置下生成的真实端到端链路结果。报告分别记录 `primary_provider`、`actual_provider`、`primary_role`、`actual_role`、`model` 和 fallback。
 
 ```bash
 EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
 ```
 
-该脚本会记录服务商、模型、`data_source=postgresql`、35 个用例的通过数、真实 LLM 调用、故障切换、延迟、Token 与估算成本。无 Supabase、API Key 或固定模型时会明确跳过，绝不输出“0 次调用 / 100% 通过”的误导报告。
+该脚本会记录服务商、模型角色、实际模型、`data_source=postgresql`、35 个用例的通过数、真实 LLM 调用、故障切换、延迟、Token 与估算成本。无 Supabase、API Key 或固定 Main 模型时会明确跳过，绝不输出“0 次调用 / 100% 通过”的误导报告。
 
 ### 已知 / 已修复的失败案例
 
@@ -220,11 +220,17 @@ EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
 Render 免费 Web 服务
   ↓
 Streamlit / FastAPI → 应用服务
-  ↓                  ↘ DeepSeek（LLM 理解 / 表达）
+  ↓                  ↘ SiliconFlow：Router → Main → Reason（Vision 预留）
 Supabase PostgreSQL
 ```
 
 该部署用于作品集演示与低流量验证，而非高可用生产服务。真实约束包括：Render Free 冷启动、资源有限、无高可用；业务数据由 Supabase 持久化，但 Render 本地 JSONL Audit/Badcase 文件在服务重启后可能丢失。完整配置、Supabase 初始化、环境变量、quota 与排障见 [部署说明](docs/deploy-render.md)。
+
+### LLM 四角色配置
+
+`.env` 使用四个独立模型变量：`ROUTER` 负责低成本意图提示；`MAIN` 负责结构化 Query Plan、答案和报告文字；`REASON` 只在 Main 请求失败或输出不合规时作为备用；`VISION` 为未来图片/多模态入口预留，不参与普通文本 fallback。Router 的结果不能绕过本地 Query Plan、RBAC、语义层和只读 SQL 校验。
+
+旧版 `MODEL_ROUTER`、`MODEL_MAIN`、`MODEL_REASON`、`MODEL_VISION` 以及更早的 `MODEL_DEEPSEEK`、`MODEL_QWEN`、`MODEL_GLM` 仍可兼容读取，但新部署应使用 `ROUTER`、`MAIN`、`REASON`、`VISION`；旧版 Qwen/GLM 只会映射为一个 Reason 模型，不再形成多级文本 fallback。
 
 <a id="demo"></a>
 
@@ -259,7 +265,7 @@ python3 scripts/run_evaluation.py              # DuckDB 确定性回归
 python3 scripts/verify_project_consistency.py
 python3 scripts/smoke_query.py
 
-# Supabase 真实 LLM 端到端评测（需 DATA_SOURCE=postgresql、DATABASE_URL、DEEPSEEK_API_KEY）
+# Supabase 真实 LLM 端到端评测（需 DATA_SOURCE=postgresql、DATABASE_URL、SILICONFLOW_API_KEY）
 EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
 ```
 

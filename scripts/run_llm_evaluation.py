@@ -30,7 +30,8 @@ from app.agent.graph import run_agent
 from app.config import DataSourceConfig
 from app.data_sources.base import DataSourceBase
 from app.data_sources.factory import create_data_source
-from app.llm.openrouter_client import OpenRouterConfig, load_env_file
+from app.config import load_env_file
+from app.llm.siliconflow_client import SiliconFlowConfig
 from app.quality.evaluation import _load_cases
 
 REPORT_PATH = ROOT / "reports" / "llm_evaluation_report.json"
@@ -152,13 +153,13 @@ def _create_evaluation_source() -> DataSourceBase:
 
 def main() -> int:
     load_env_file(ROOT / ".env")
-    if not OpenRouterConfig.is_configured(ROOT, mode="evaluation"):
+    if not SiliconFlowConfig.is_configured(ROOT, mode="evaluation"):
         _delete_stale_report()
-        print("SKIP: 未配置 DEEPSEEK_API_KEY 或可用固定模型，LLM E2E 评测跳过（不会生成报告）。")
+        print("SKIP: 未配置 SILICONFLOW_API_KEY 或可用固定模型，LLM E2E 评测跳过（不会生成报告）。")
         print("确定性 baseline 评测请运行: python3 scripts/run_evaluation.py")
         return 0
 
-    config = OpenRouterConfig.from_env(ROOT, mode="evaluation")
+    config = SiliconFlowConfig.from_env(ROOT, mode="evaluation")
     model = config.model
     cases = _load_cases(ROOT)
     try:
@@ -232,12 +233,19 @@ def main() -> int:
             "latency_ms": int(latency * 1000),
             "llm_calls": llm_calls, "fallback": fallback > 0,
             "llm_providers": [entry.get("provider") for entry in entries if entry.get("provider")],
+            "llm_roles": [entry.get("role") for entry in entries if entry.get("role")],
             "primary_provider": config.provider,
+            "primary_role": "main",
+            "primary_model": config.model,
             "actual_provider": next((entry.get("provider") for entry in reversed(entries) if entry.get("provider")), config.provider),
+            "actual_role": next((entry.get("role") for entry in reversed(entries) if entry.get("role")), "main"),
+            "actual_model": next((entry.get("model") for entry in reversed(entries) if entry.get("model")), config.model),
             "fallback_events": [
                 {
                     "provider": entry.get("provider"),
-                    "fallback_from": entry.get("fallback_from"),
+                    "role": entry.get("role"),
+                    "fallback_from_model": entry.get("fallback_from_model") or entry.get("fallback_from"),
+                    "fallback_model": entry.get("provider_fallback_model") or entry.get("fallback_model"),
                     "fallback_reason": entry.get("fallback_reason"),
                 }
                 for entry in entries
@@ -268,6 +276,7 @@ def main() -> int:
         "provider": config.provider,
         "primary_provider": config.provider,
         "model": model,
+        "model_roles": ["router", "main", "reason", "vision"],
         "data_source": "postgresql",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "evaluation_timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),

@@ -10,7 +10,7 @@ from app.agent.state import new_state
 from app.agent.nodes.parse_request import _contextualize_follow_up
 from app.agent.nlq import NaturalLanguageQueryEngine
 from app.application import AgentApplicationService
-from app.llm.openrouter_client import OpenRouterClient, OpenRouterConfig
+from app.llm.siliconflow_client import SiliconFlowClient, SiliconFlowConfig
 from app.presentation.decision_support import build_recommended_questions
 
 
@@ -64,49 +64,57 @@ class FollowUpQuestionsTest(unittest.TestCase):
         self.assertIn("2025年11月", expanded)
 
 
-class DeepSeekPrimaryConfigTest(unittest.TestCase):
-    def test_deepseek_is_default_primary_and_openrouter_is_optional_fallback(self) -> None:
+class SiliconFlowPrimaryConfigTest(unittest.TestCase):
+    def test_main_is_primary_with_reason_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
-            "DEEPSEEK_API_KEY": "deepseek-test",
-            "OPENROUTER_API_KEY": "openrouter-test",
+            "SILICONFLOW_API_KEY": "siliconflow-test",
+            "ROUTER": "router/model",
+            "MAIN": "main/model",
+            "REASON": "reason/model",
+            "VISION": "vision/model",
         }, clear=True):
-            config = OpenRouterConfig.from_env(Path(directory))
-        self.assertEqual(config.provider, "deepseek")
-        self.assertEqual(config.model, "deepseek-chat")
-        self.assertEqual(config.fallback_provider, "openrouter")
+            config = SiliconFlowConfig.from_env(Path(directory))
+        self.assertEqual(config.provider, "siliconflow")
+        self.assertEqual(config.model, "main/model")
+        self.assertEqual(config.router_model, "router/model")
+        self.assertEqual(config.reason_model, "reason/model")
+        self.assertEqual(config.fallback_models, ("reason/model",))
 
-    def test_deepseek_can_run_without_openrouter_key(self) -> None:
+    def test_default_main_can_run_with_same_gateway_reason(self) -> None:
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
-            "LLM_PROVIDER": "deepseek",
-            "DEEPSEEK_API_KEY": "deepseek-test",
+            "SILICONFLOW_API_KEY": "siliconflow-test",
+            "REASON": "reason/model",
         }, clear=True):
-            config = OpenRouterConfig.from_env(Path(directory))
-        self.assertEqual(config.provider, "deepseek")
-        self.assertFalse(config.openrouter_api_key)
+            config = SiliconFlowConfig.from_env(Path(directory))
+        self.assertEqual(config.provider, "siliconflow")
+        self.assertTrue(config.fallback_models)
 
-    def test_rate_limit_is_classified_before_openrouter_fallback(self) -> None:
+    def test_rate_limit_is_classified_before_next_model_fallback(self) -> None:
         class FakeRateLimitError(Exception):
             status_code = 429
 
-        config = OpenRouterConfig(
-            api_key="deepseek-test", provider="deepseek", model="deepseek-chat",
-            max_retries=0, openrouter_api_key="openrouter-test",
+        config = SiliconFlowConfig(
+            api_key="siliconflow-test", model="main/model",
+            max_retries=0, reason_model="reason/model",
         )
-        client = OpenRouterClient(config)
+        client = SiliconFlowClient(config)
         response = Mock(choices=[Mock(message=Mock(content="ok"))], usage=None)
-        with patch.object(client._client.chat.completions, "create", side_effect=FakeRateLimitError("429")):
-            with patch.object(client._openrouter_client.chat.completions, "create", return_value=response):
-                client.complete_text("system", "user")
+        with patch.object(
+            client._client.chat.completions,
+            "create",
+            side_effect=[FakeRateLimitError("429"), response],
+        ):
+            client.complete_text("system", "user")
         self.assertEqual(client.last_call_metadata["fallback_reason"], "rate_limit")
-        self.assertEqual(client.last_call_metadata["fallback_from"], "deepseek")
+        self.assertEqual(client.last_call_metadata["fallback_from_model"], "main/model")
 
-    def test_missing_openrouter_fallback_returns_graceful_error_metadata(self) -> None:
-        config = OpenRouterConfig(
-            api_key="deepseek-test", provider="deepseek", model="deepseek-chat", max_retries=0,
+    def test_missing_model_fallback_returns_graceful_error_metadata(self) -> None:
+        config = SiliconFlowConfig(
+            api_key="siliconflow-test", model="main/model", max_retries=0,
         )
-        client = OpenRouterClient(config)
+        client = SiliconFlowClient(config)
         with patch.object(client._client.chat.completions, "create", side_effect=TimeoutError("timeout")):
-            with self.assertRaisesRegex(RuntimeError, "未配置可选 fallback") as raised:
+            with self.assertRaisesRegex(RuntimeError, "未配置可用 Reason fallback") as raised:
                 client.complete_text("system", "user")
         self.assertEqual(raised.exception.llm_metadata["error_category"], "timeout")
         self.assertFalse(raised.exception.llm_metadata["fallback_available"])

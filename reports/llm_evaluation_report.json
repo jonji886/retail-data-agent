@@ -1,31 +1,41 @@
 {
   "mode": "llm",
-  "provider": "openrouter",
-  "model": "google/gemma-4-26b-a4b-it:free",
+  "provider": "siliconflow",
+  "primary_provider": "siliconflow",
+  "model": "deepseek-ai/DeepSeek-V4-Flash",
+  "model_roles": [
+    "router",
+    "main",
+    "reason",
+    "vision"
+  ],
   "data_source": "postgresql",
-  "generated_at": "2026-08-21T10:04:44+00:00",
-  "evaluation_timestamp": "2026-08-21T10:04:44+00:00",
+  "generated_at": "2026-08-24T05:24:26+00:00",
+  "evaluation_timestamp": "2026-08-24T05:24:26+00:00",
   "note": "LLM-enabled evaluation：真实调用 LLM 构建 Query Plan；相对时间窗口由 deterministic relative-time policy 统一归一化。",
   "total": 35,
-  "passed": 34,
+  "passed": 35,
   "case_count": 35,
-  "pass_count": 34,
-  "pass_rate": 0.9714285714285714,
-  "overall_pass_rate": 0.9714285714285714,
+  "pass_count": 35,
+  "pass_rate": 1.0,
+  "overall_pass_rate": 1.0,
   "plan_accuracy": 1.0,
   "executable_cases": 27,
   "non_executable_cases": 8,
-  "executable_success_rate": 0.9629629629629629,
-  "total_llm_calls": 53,
-  "llm_calls": 53,
-  "fallback_count": 53,
-  "fallback_case_count": 29,
-  "fallback_rate": 0.8285714285714286,
-  "total_latency_s": 461.49900543199993,
-  "latency_ms": 461499,
-  "input_tokens": 38644,
-  "output_tokens": 5307,
-  "total_tokens": 43951,
+  "executable_success_rate": 1.0,
+  "total_llm_calls": 56,
+  "llm_calls": 56,
+  "fallback_count": 3,
+  "fallback_case_count": 3,
+  "fallback_rate": 0.08571428571428572,
+  "actual_providers": [
+    "siliconflow"
+  ],
+  "total_latency_s": 850.212740854,
+  "latency_ms": 850212,
+  "input_tokens": 41034,
+  "output_tokens": 17191,
+  "total_tokens": 58225,
   "estimated_cost": null,
   "results": [
     {
@@ -35,25 +45,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 14432,
+      "latency_ms": 10549,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -64,25 +73,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 72721,
+      "latency_ms": 14027,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -93,25 +101,24 @@
       "passed": true,
       "intent": "trend_analysis",
       "permission_decision": "allow",
-      "latency_ms": 13664,
+      "latency_ms": 60993,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -122,25 +129,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 12850,
+      "latency_ms": 17781,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -151,25 +157,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 14021,
+      "latency_ms": 11209,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -180,25 +185,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 13646,
+      "latency_ms": 11695,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -209,25 +213,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 12715,
+      "latency_ms": 14837,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -238,25 +241,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 13680,
+      "latency_ms": 13881,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -267,25 +269,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 13504,
+      "latency_ms": 13610,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -296,25 +297,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 13284,
+      "latency_ms": 13569,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -325,25 +325,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 13642,
+      "latency_ms": 13783,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -354,25 +353,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 13687,
+      "latency_ms": 14393,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -383,25 +381,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 12832,
+      "latency_ms": 45037,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -412,25 +409,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 35225,
+      "latency_ms": 82433,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -441,25 +437,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 14607,
+      "latency_ms": 49008,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -467,32 +462,29 @@
       "case_id": "g016",
       "question": "过去3个月各区域销售额趋势",
       "category": "trend",
-      "passed": false,
+      "passed": true,
       "intent": "trend_analysis",
       "permission_decision": "allow",
-      "latency_ms": 16097,
+      "latency_ms": 38554,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
-      "errors": [
-        "ground_truth mismatch: row_count=24 expected=12"
-      ]
+      "errors": []
     },
     {
       "case_id": "g017",
@@ -501,25 +493,24 @@
       "passed": true,
       "intent": "trend_analysis",
       "permission_decision": "allow",
-      "latency_ms": 15235,
+      "latency_ms": 27692,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -530,19 +521,22 @@
       "passed": true,
       "intent": "attribution_analysis",
       "permission_decision": "allow",
-      "latency_ms": 9182,
+      "latency_ms": 15712,
       "llm_calls": 1,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek"
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -553,19 +547,22 @@
       "passed": true,
       "intent": "anomaly_analysis",
       "permission_decision": "allow",
-      "latency_ms": 11692,
+      "latency_ms": 7824,
       "llm_calls": 1,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek"
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -576,19 +573,22 @@
       "passed": true,
       "intent": "report_generation",
       "permission_decision": "allow",
-      "latency_ms": 13804,
+      "latency_ms": 15554,
       "llm_calls": 1,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek"
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -599,10 +599,21 @@
       "passed": true,
       "intent": "unsupported",
       "permission_decision": null,
-      "latency_ms": 765,
+      "latency_ms": 13896,
       "llm_calls": 0,
-      "fallback": false,
-      "llm_providers": [],
+      "fallback": true,
+      "llm_providers": [
+        "siliconflow"
+      ],
+      "llm_roles": [
+        "router"
+      ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "router",
+      "actual_model": "Qwen/Qwen3-8B",
       "fallback_events": [],
       "error_type": "UNSUPPORTED_INTENT",
       "errors": []
@@ -614,10 +625,21 @@
       "passed": true,
       "intent": "unsupported",
       "permission_decision": null,
-      "latency_ms": 836,
+      "latency_ms": 52256,
       "llm_calls": 0,
-      "fallback": false,
-      "llm_providers": [],
+      "fallback": true,
+      "llm_providers": [
+        "siliconflow"
+      ],
+      "llm_roles": [
+        "router"
+      ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "router",
+      "actual_model": "Qwen/Qwen3-8B",
       "fallback_events": [],
       "error_type": "UNSUPPORTED_INTENT",
       "errors": []
@@ -629,25 +651,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 12452,
+      "latency_ms": 34575,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -658,25 +679,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 12441,
-      "llm_calls": 2,
+      "latency_ms": 24373,
+      "llm_calls": 1,
       "fallback": true,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -687,10 +707,21 @@
       "passed": true,
       "intent": "unsupported",
       "permission_decision": null,
-      "latency_ms": 739,
-      "llm_calls": 0,
+      "latency_ms": 9692,
+      "llm_calls": 1,
       "fallback": false,
-      "llm_providers": [],
+      "llm_providers": [
+        "siliconflow"
+      ],
+      "llm_roles": [
+        "router"
+      ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "router",
+      "actual_model": "Qwen/Qwen3-8B",
       "fallback_events": [],
       "error_type": "UNSUPPORTED_INTENT",
       "errors": []
@@ -702,10 +733,21 @@
       "passed": true,
       "intent": "unsupported",
       "permission_decision": null,
-      "latency_ms": 634,
-      "llm_calls": 0,
+      "latency_ms": 76032,
+      "llm_calls": 1,
       "fallback": false,
-      "llm_providers": [],
+      "llm_providers": [
+        "siliconflow"
+      ],
+      "llm_roles": [
+        "router"
+      ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "router",
+      "actual_model": "Qwen/Qwen3-8B",
       "fallback_events": [],
       "error_type": "UNSUPPORTED_INTENT",
       "errors": []
@@ -717,10 +759,21 @@
       "passed": true,
       "intent": "unsupported",
       "permission_decision": null,
-      "latency_ms": 646,
-      "llm_calls": 0,
+      "latency_ms": 13613,
+      "llm_calls": 1,
       "fallback": false,
-      "llm_providers": [],
+      "llm_providers": [
+        "siliconflow"
+      ],
+      "llm_roles": [
+        "router"
+      ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "router",
+      "actual_model": "Qwen/Qwen3-8B",
       "fallback_events": [],
       "error_type": "UNSUPPORTED_INTENT",
       "errors": []
@@ -732,10 +785,21 @@
       "passed": true,
       "intent": "unsupported",
       "permission_decision": null,
-      "latency_ms": 670,
-      "llm_calls": 0,
+      "latency_ms": 11437,
+      "llm_calls": 1,
       "fallback": false,
-      "llm_providers": [],
+      "llm_providers": [
+        "siliconflow"
+      ],
+      "llm_roles": [
+        "router"
+      ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "router",
+      "actual_model": "Qwen/Qwen3-8B",
       "fallback_events": [],
       "error_type": "UNSUPPORTED_INTENT",
       "errors": []
@@ -747,19 +811,22 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "deny",
-      "latency_ms": 7196,
+      "latency_ms": 10986,
       "llm_calls": 1,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek"
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": "UNAUTHORIZED_SCOPE",
       "errors": []
     },
@@ -770,25 +837,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 12635,
+      "latency_ms": 40848,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -799,25 +865,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 13682,
+      "latency_ms": 16176,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -828,19 +893,22 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "deny",
-      "latency_ms": 6828,
+      "latency_ms": 5150,
       "llm_calls": 1,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek"
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": "UNAUTHORIZED_SCOPE",
       "errors": []
     },
@@ -851,25 +919,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 14022,
+      "latency_ms": 18322,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -880,25 +947,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 13706,
+      "latency_ms": 10653,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     },
@@ -909,25 +975,24 @@
       "passed": true,
       "intent": "metric_query",
       "permission_decision": "allow",
-      "latency_ms": 13710,
+      "latency_ms": 20043,
       "llm_calls": 2,
-      "fallback": true,
+      "fallback": false,
       "llm_providers": [
-        "deepseek",
-        "deepseek"
+        "siliconflow",
+        "siliconflow"
       ],
-      "fallback_events": [
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        },
-        {
-          "provider": "deepseek",
-          "fallback_from": "openrouter",
-          "fallback_reason": "RateLimitError"
-        }
+      "llm_roles": [
+        "main",
+        "main"
       ],
+      "primary_provider": "siliconflow",
+      "primary_role": "main",
+      "primary_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "actual_provider": "siliconflow",
+      "actual_role": "main",
+      "actual_model": "deepseek-ai/DeepSeek-V4-Flash",
+      "fallback_events": [],
       "error_type": null,
       "errors": []
     }

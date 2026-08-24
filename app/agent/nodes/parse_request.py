@@ -1,6 +1,6 @@
 """parse_request 节点：Question → Intent → QueryPlan。
 
-优先复用现有 NaturalLanguageQueryEngine / OpenRouterNLQEngine。
+优先复用现有 NaturalLanguageQueryEngine / SiliconFlowNLQEngine。
 LLM 不可用时保持 deterministic baseline 可独立运行。
 增加 intent 识别（现有引擎只识别 metric_query，需扩展到 attribution/anomaly/report）。
 """
@@ -107,6 +107,51 @@ def parse_request(state: AgentState) -> AgentState:
         "status": "success", "intent": intent,
     })
 
+    # 确定性规则无法识别时，才调用低成本 Router 作为意图提示。
+    # Router 不能直接放行请求；若它给出可支持意图，后续仍会经过本地
+    # Query Plan / RBAC / 语义层校验。Router 不可用时保持安全的 unsupported。
+    if intent == Intent.UNSUPPORTED and use_llm:
+        router_engine = None
+        try:
+            from app.agent.llm_nlq import SiliconFlowNLQEngine
+            from app.llm.siliconflow_client import SiliconFlowConfig
+
+            if SiliconFlowConfig.is_role_configured(root, "router", mode=llm_mode):
+                router_engine = SiliconFlowNLQEngine(root, data_source=data_source, mode=llm_mode)
+                routed_intent = router_engine.route_intent(question)
+                metadata = dict(router_engine.client.last_call_metadata)
+                llm_calls = list(state.get("llm_calls", []))
+                llm_calls.append({
+                    "provider": metadata.get("provider", router_engine.config.provider),
+                    "role": "router",
+                    "node": "parse_request",
+                    "status": "success",
+                    "model": metadata.get("model", router_engine.config.router_model),
+                    "prompt_version": "router-v1",
+                    **metadata,
+                })
+                state = {**state, "llm_calls": llm_calls}  # type: ignore[assignment]
+                if routed_intent != Intent.UNSUPPORTED:
+                    intent = routed_intent
+                    events[-1]["intent"] = intent
+            # 没有 Router 配置时保持纯确定性 unsupported，不发起隐式 Main 请求。
+        except Exception as exc:  # noqa: BLE001
+            metadata = dict(getattr(getattr(router_engine, "client", None), "last_call_metadata", {}))
+            config = getattr(router_engine, "config", None)
+            llm_calls = list(state.get("llm_calls", []))
+            llm_calls.append({
+                "provider": metadata.get("provider", getattr(config, "provider", "siliconflow")),
+                "role": "router",
+                "node": "parse_request",
+                "status": "fallback",
+                "model": metadata.get("model", getattr(config, "router_model", "unknown")),
+                "fallback_model": "deterministic",
+                "reason": type(exc).__name__,
+                "error_category": metadata.get("error_category"),
+                "retry_count": metadata.get("retry_count", 0),
+            })
+            state = {**state, "llm_calls": llm_calls}  # type: ignore[assignment]
+
     if intent == Intent.UNSUPPORTED:
         return {
             **state,
@@ -121,9 +166,9 @@ def parse_request(state: AgentState) -> AgentState:
     if intent in (Intent.METRIC_QUERY, Intent.TREND_ANALYSIS):
         try:
             if use_llm:
-                from app.agent.llm_nlq import OpenRouterNLQEngine
+                from app.agent.llm_nlq import SiliconFlowNLQEngine
                 try:
-                    llm_engine = OpenRouterNLQEngine(root, data_source=data_source, mode=llm_mode)
+                    llm_engine = SiliconFlowNLQEngine(root, data_source=data_source, mode=llm_mode)
                     parsed = llm_engine.parse(question)
                     llm_calls = list(state.get("llm_calls", []))
                     metadata = dict(llm_engine.client.last_call_metadata)
@@ -141,12 +186,15 @@ def parse_request(state: AgentState) -> AgentState:
                     llm_calls = list(state.get("llm_calls", []))
                     metadata = getattr(getattr(locals().get("llm_engine"), "client", None), "last_call_metadata", {})
                     llm_calls.append({
-                        "provider": getattr(getattr(locals().get("llm_engine"), "config", None), "provider", "deepseek"), "node": "parse_request",
+                        "provider": getattr(getattr(locals().get("llm_engine"), "config", None), "provider", "siliconflow"), "role": "main", "node": "parse_request",
                         "status": "fallback", "model": getattr(getattr(locals().get("llm_engine"), "config", None), "model", "unknown"),
                         "fallback_model": "deterministic", "reason": type(exc).__name__,
                         "retry_count": metadata.get("retry_count", 0),
                         "provider_fallback_used": metadata.get("fallback_used", metadata.get("fallback_attempted", False)),
-                        "fallback_provider": metadata.get("fallback_from") or metadata.get("fallback_provider"),
+                        "fallback_provider": metadata.get("fallback_provider"),
+                        "fallback_from_model": metadata.get("fallback_from_model") or metadata.get("fallback_from"),
+                        "provider_fallback_model": metadata.get("fallback_model"),
+                        "fallback_reason": metadata.get("fallback_reason"),
                         "error_category": metadata.get("error_category"),
                     })
                     state = {**state, "llm_calls": llm_calls}  # type: ignore[assignment]
