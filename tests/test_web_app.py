@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import os
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class WebAppInteractionTest(unittest.TestCase):
@@ -17,7 +20,7 @@ class WebAppInteractionTest(unittest.TestCase):
     }
 
     def make_app(self) -> AppTest:
-        app = AppTest.from_file("app/web_app.py", default_timeout=45)
+        app = AppTest.from_file(str(PROJECT_ROOT / "app" / "web_app.py"), default_timeout=45)
         app.run()
         return app
 
