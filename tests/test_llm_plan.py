@@ -101,8 +101,8 @@ class LLMPlanValidationTest(unittest.TestCase):
 class SiliconFlowConfigTest(unittest.TestCase):
     def test_evaluation_engine_loads_pinned_evaluation_config(self) -> None:
         config = Mock()
-        with patch("app.agent.llm_nlq.SiliconFlowConfig.from_env", return_value=config) as load, \
-             patch("app.agent.llm_nlq.SiliconFlowClient"):
+        with patch("app.agent.llm_nlq.create_model_config", return_value=config) as load, \
+             patch("app.agent.llm_nlq.create_model_client"):
             engine = SiliconFlowNLQEngine(Path("."), mode="evaluation")
         load.assert_called_once_with(Path("."), mode="evaluation")
         self.assertIs(engine.config, config)
@@ -113,7 +113,7 @@ class SiliconFlowConfigTest(unittest.TestCase):
             with patch.dict(os.environ, {}, clear=True):
                 self.assertFalse(SiliconFlowConfig.is_configured(root))
             with patch.dict(os.environ, {
-                "LLM_PROVIDER": "deepseek",
+                "LLM_PROVIDER": "siliconflow",
                 "SILICONFLOW_API_KEY": "test-key",
             }, clear=True):
                 self.assertTrue(SiliconFlowConfig.is_configured(root))
@@ -122,7 +122,7 @@ class SiliconFlowConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             with patch.dict(os.environ, {
-                "LLM_PROVIDER": "deepseek",
+                "LLM_PROVIDER": "siliconflow",
                 "SILICONFLOW_API_KEY": "test-key",
                 "LLM_TIMEOUT_SECONDS": "invalid",
             }, clear=True):

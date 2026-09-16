@@ -1,6 +1,6 @@
 # ADR 006：为什么采用硅基流动网关与模型优先级
 
-> 状态：2026-08-24 起硅基流动为唯一模型网关；Router / Main / Reason / Vision 四角色配置生效。
+> 状态：历史决策（2026-08-24）。Provider 选择已由 [ADR 007](007-model-provider-abstraction-and-benchmark.md) 扩展为可配置；本文的 Router / Main / Reason / Vision 职责边界仍有效。
 
 ## Context
 

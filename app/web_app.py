@@ -15,9 +15,9 @@ sys.path.insert(0, str(ROOT))
 
 from app.application import AgentApplicationService
 from app.data_sources.factory import create_data_source
-from app.agent.llm_nlq import SiliconFlowNLQEngine
+from app.agent.llm_nlq import LLMNLQEngine
 from app.agent.nlq import NaturalLanguageQueryEngine
-from app.llm.siliconflow_client import provider_status
+from app.llm.siliconflow_client import create_model_client, create_model_config, provider_status
 from app.analytics.anomaly import SalesAnomalyDetector
 from app.analytics.attribution import SalesAttributor
 from app.quality.audit import AuditLogger
@@ -70,8 +70,8 @@ def selected_region(settings: Dict[str, str]):
     return None if settings["region"] == "全部区域" else settings["region"]
 
 
-def siliconflow_status() -> tuple[bool, str]:
-    """返回当前硅基流动是否可用与首选模型名。"""
+def llm_provider_status() -> tuple[bool, str]:
+    """返回当前 Model Provider 是否可用与首选模型名。"""
     status = provider_status(ROOT)
     return status["status"] == "available", str(status["model"])
 
@@ -130,13 +130,14 @@ def render_ask() -> None:
         "上个月按渠道统计订单数",
     ]
     question = st.text_input("请输入经营问题", value=examples[0])
-    llm_ready, model = siliconflow_status()
+    llm_ready, model = llm_provider_status()
     if llm_ready:
         st.caption("主模型已配置（模型：%s），调用结果仍会经过本地语义层、权限和只读 SQL 校验。" % model)
     else:
-        st.info("当前未配置主模型 Key，仅提供确定性基线。可在运行环境中配置 SILICONFLOW_API_KEY。")
-    siliconflow_mode = "主模型（%s）" % model
-    modes = ["确定性基线"] + ([siliconflow_mode] if llm_ready else [])
+        key_name = provider_status(ROOT).get("api_key_env", "对应 Provider 的 API Key")
+        st.info("当前未配置主模型 Key，仅提供确定性基线。可在运行环境中配置 %s。" % key_name)
+    llm_mode_label = "主模型（%s）" % model
+    modes = ["确定性基线"] + ([llm_mode_label] if llm_ready else [])
     mode = st.radio("解析模式", modes, horizontal=True)
     logger = AuditLogger(ROOT)
     if st.button("开始分析", type="primary"):
@@ -145,7 +146,7 @@ def render_ask() -> None:
         try:
             with request_log_context(
                 surface="natural_language_query",
-                use_llm=mode == siliconflow_mode,
+                use_llm=mode == llm_mode_label,
             ) as log_context:
                 diagnostic = log_context
                 data_source = app_data_source()
@@ -154,8 +155,8 @@ def render_ask() -> None:
                     question_length=len(question),
                     datasource=data_source.dialect,
                 )
-                if mode == siliconflow_mode:
-                    answer = SiliconFlowNLQEngine(ROOT, data_source=data_source).answer(question)
+                if mode == llm_mode_label:
+                    answer = LLMNLQEngine(ROOT, data_source=data_source).answer(question)
                 else:
                     answer = deterministic_engine().answer(question)
                 log_event(
@@ -239,7 +240,7 @@ def render_alerts(settings: Dict[str, str]) -> None:
 
 def render_report(settings: Dict[str, str]) -> None:
     st.subheader("智能经营报告")
-    llm_ready, model = siliconflow_status()
+    llm_ready, model = llm_provider_status()
     use_llm = st.checkbox("使用模型生成报告文字", value=llm_ready, disabled=not llm_ready)
     if llm_ready:
         st.caption("已连接主模型（模型：%s）。报告中的 KPI、趋势和归因数字仍由本地逻辑生成。" % model)
@@ -265,8 +266,9 @@ def render_report(settings: Dict[str, str]) -> None:
                     context = report_builder().build_context(settings["month"], selected_region(settings), settings["dimension"])
                     if use_llm:
                         status.write("2/2 正在调用主模型组织报告文字…")
-                        from app.llm.siliconflow_client import SiliconFlowClient, SiliconFlowConfig
-                        report = RetailReportBuilder.to_siliconflow_markdown(context, SiliconFlowClient(SiliconFlowConfig.from_env(ROOT)))
+                        report = RetailReportBuilder.to_model_markdown(
+                            context, create_model_client(create_model_config(ROOT))
+                        )
                     else:
                         status.write("2/2 正在生成确定性 Markdown 报告…")
                         report = RetailReportBuilder.to_markdown(context)
@@ -392,7 +394,7 @@ def render_agent_legacy() -> None:
         "门店经理 (user_store_01)": ("user_store_01", "store_manager", {"scope": "store", "store_id": "S001", "store_name": "上海旗舰店1店"}),
     }
     user_label = cols[0].selectbox("当前用户（权限）", list(user_options.keys()))
-    llm_ready, model = siliconflow_status()
+    llm_ready, model = llm_provider_status()
     use_llm = cols[1].checkbox("使用模型辅助", value=llm_ready, disabled=not llm_ready)
     if llm_ready:
         st.caption("主模型已配置（模型：%s）；模型只负责计划/文字，权限、SQL 和指标计算仍由本地逻辑负责。" % model)
@@ -596,7 +598,7 @@ def render_ai_assistant() -> None:
         "门店经理（演示身份）": ("user_store_01", "store_manager", {"scope": "store", "store_id": "S001", "store_name": "上海旗舰店1店"}),
     }
     user_label = cols[0].selectbox("当前演示身份", list(user_options.keys()), key="agent_user")
-    llm_ready, model = siliconflow_status()
+    llm_ready, model = llm_provider_status()
     use_llm = cols[1].checkbox("启用模型辅助", value=llm_ready, disabled=not llm_ready, key="agent_use_llm")
     if llm_ready:
         st.caption("模型：%s；权限、指标口径和 SQL 仍由确定性系统控制。" % model)
@@ -743,7 +745,7 @@ def render_governance() -> None:
         status = provider_status(ROOT)
         metrics = GLOBAL_METRICS.snapshot()
         cols = st.columns(6)
-        cols[0].metric("主 Provider", "硅基流动")
+        cols[0].metric("主 Provider", status.get("provider_display_name", status.get("primary_provider", "unknown")))
         cols[1].metric("Main Model", status["main_model"])
         cols[2].metric("状态", "Available" if status["status"] == "available" else "Not configured")
         cols[3].metric("Reason Model", status.get("reason_model") or "disabled")

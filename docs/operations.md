@@ -13,7 +13,7 @@ Render 部署后，进入服务的 **Logs → Application logs**，搜索下面�
 | `agent_request_rejected` / `application_request_completed` | Demo quota 拒绝和 Application Service 返回结果 |
 | `http_query_completed` | FastAPI `/api/v1/query` 的 HTTP 返回状态和耗时 |
 | `report_request_started` / `completed` / `failed` | 报告生成入口及耗时 |
-| `llm_provider_request` | 硅基流动每个模型的实际请求、重试次数、HTTP 状态、错误类型、Token 与延迟 |
+| `llm_provider_request` | 当前 Provider 每个模型的实际请求、重试次数、HTTP 状态、错误类型、Token 与延迟 |
 | `llm_fallback_started` / `skipped` | Main 失败后的 Reason 切换，或 Router/Vision 不适用的原因 |
 | `llm_request_completed` / `failed` | 一次 LLM 逻辑调用的最终 Provider、是否切换和最终错误 |
 

@@ -65,9 +65,9 @@ LLM / 规则理解：查询计划（`intent`、指标、维度、筛选、时间
 | --- | --- |
 | 版本与体验 | v1.0.0；[可直接体验](https://retail-data-agent.onrender.com) |
 | 确定性回归 | 35 个 Golden 用例，35/35 通过 |
-| 真实 LLM 端到端评测 | Supabase PostgreSQL 上 34/35 通过；详见[评测](#evaluation) |
+| 真实 LLM 端到端评测 | Supabase PostgreSQL 上 35/35 通过（历史固定模型基线）；详见[评测](#evaluation) |
 | 治理边界 | RBAC + 数据范围、语义层、只读 SQL 守卫、追踪 + 审计 |
-| 公网部署 | Render + Supabase PostgreSQL + 硅基流动（Router → Main → Reason；Vision 预留） |
+| 公网部署 | Render + Supabase PostgreSQL；LLM Provider 可配置为 DeepSeek、Qwen 或 SiliconFlow |
 | CI | [![CI](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/jonji886/retail-data-agent/actions/workflows/ci.yml)；静态检查、单测、确定性回归、一致性检查与冒烟测试 |
 
 <details>
@@ -76,8 +76,8 @@ LLM / 规则理解：查询计划（`intent`、指标、维度、筛选、时间
 ```text
 Status: MVP
 Version: v1.0.0
-Last verified: 2026-08-24
-Primary LLM Model: DeepSeek（硅基流动）
+Last verified: 2026-09-16
+Primary LLM Model: DeepSeek/deepseek-flash
 
 Golden cases: 35
 Evaluation cases: 35
@@ -135,7 +135,8 @@ DataSourceBase ◀─────┘
 | 权限边界 | [策略模块](app/tools/permission.py) 在 SQL 前执行 RBAC + 数据范围注入；越权不调用业务工具 |
 | SQL 安全 | [ReadOnlySQLRunner](app/tools/sql_runner.py) 仅允许单条 SELECT，拦截写操作、外部访问与危险路径，限制行数/资源 |
 | 数据源抽象 | [`DataSourceBase`](app/data_sources/base.py) + [DuckDB](app/data_sources/duckdb.py) + [PostgreSQL/Supabase](app/data_sources/postgresql.py) |
-| LLM 可靠性 | [硅基流动客户端](app/llm/siliconflow_client.py)：Router / Main / Reason / Vision 角色、有限重试、确定性回退 |
+| Model Provider | [Provider 注册表](app/llm/providers.py) + OpenAI-compatible 客户端：DeepSeek、Qwen、SiliconFlow；业务 Agent 不绑定单一模型 |
+| LLM 可靠性 | Router / Main / Reason / Vision 角色、有限重试、确定性回退；逐次调用记录 Token、延迟、成本来源与 Trace ID |
 | 可观测与审计 | [追踪状态](app/agent/state.py) 记录逐节点状态/耗时；[审计](app/quality/audit.py) 记录问题、计划、工具、结果与状态 |
 | 质量门禁 | [35 个 Golden 用例](configs/evaluation/golden_questions.json)、[评测脚本](scripts/run_evaluation.py)、[一致性校验](scripts/verify_project_consistency.py) 和 CI |
 | API 与演示边界 | [FastAPI](app/api.py) `/api/v1/query`、`/health`、`/ready` 与 [Streamlit](app/web_app.py) 共用应用服务；演示额度在 LLM 调用前生效 |
@@ -197,7 +198,7 @@ DataSourceBase ◀─────┘
 | 服务商故障切换 | 3 / 35 个用例（8.6%） |
 | 耗时 / Token | 总计 850.2 秒 / 58,225 Token |
 
-上表是当前硅基流动四角色配置下生成的真实端到端链路结果。报告分别记录 `primary_provider`、`actual_provider`、`primary_role`、`actual_role`、`model` 和 fallback。
+上表来自历史 SiliconFlow 配置下的真实端到端链路结果；当前 Provider 可通过环境配置切换。报告记录 `primary_provider`、`actual_provider`、`primary_role`、`actual_role`、`model` 和 fallback。
 
 ```bash
 EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
@@ -220,17 +221,42 @@ EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
 Render 免费 Web 服务
   ↓
 Streamlit / FastAPI → 应用服务
-  ↓                  ↘ SiliconFlow：Router → Main → Reason（Vision 预留）
+  ↓                  ↘ Model Provider：DeepSeek / Qwen / SiliconFlow
 Supabase PostgreSQL
 ```
 
 该部署用于作品集演示与低流量验证，而非高可用生产服务。真实约束包括：Render Free 冷启动、资源有限、无高可用；业务数据由 Supabase 持久化，但 Render 本地 JSONL Audit/Badcase 文件在服务重启后可能丢失。完整配置、Supabase 初始化、环境变量、quota 与排障见 [部署说明](docs/deploy-render.md)。
 
-### LLM 四角色配置
+### Model Provider 与模型配置
 
-`.env` 使用四个独立模型变量：`ROUTER` 负责低成本意图提示；`MAIN` 负责结构化 Query Plan、答案和报告文字；`REASON` 只在 Main 请求失败或输出不合规时作为备用；`VISION` 为未来图片/多模态入口预留，不参与普通文本 fallback。Router 的结果不能绕过本地 Query Plan、RBAC、语义层和只读 SQL 校验。
+Agent 通过统一的 OpenAI-compatible Chat Completions 客户端调用模型；业务节点、Skill、语义层、权限策略与 SQL 执行均不依赖具体 Provider。当前支持 DeepSeek API、Qwen（阿里云百炼）和 SiliconFlow，`LLM_PROVIDER` 控制选择，Provider/API Key 与模型名称分别配置。
 
-旧版 `MODEL_ROUTER`、`MODEL_MAIN`、`MODEL_REASON`、`MODEL_VISION` 以及更早的 `MODEL_DEEPSEEK`、`MODEL_QWEN`、`MODEL_GLM` 仍可兼容读取，但新部署应使用 `ROUTER`、`MAIN`、`REASON`、`VISION`；旧版 Qwen/GLM 只会映射为一个 Reason 模型，不再形成多级文本 fallback。
+在 `.env` 中选择 Qwen 的示例：
+
+```env
+LLM_PROVIDER=qwen
+QWEN_API_KEY=<your-api-key>
+QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+QWEN_MAIN_MODEL=qwen3.8-flash
+QWEN_ROUTER_MODEL=
+QWEN_REASONING_MODEL=
+```
+
+DeepSeek 示例使用 `LLM_PROVIDER=deepseek`、`DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL` 和 `DEEPSEEK_MAIN_MODEL`。通用 `LLM_MODEL` 可覆盖当前 Provider 的 Main；`LLM_ROUTER_MODEL`、`LLM_REASONING_MODEL`、`LLM_VISION_MODEL` 配置通用角色模型。Provider 专属角色配置便于同一进程运行跨 Provider Benchmark。真实密钥只放在被忽略的 `.env` 或部署环境变量中，不提交到仓库。
+
+Router 只为确定性规则无法识别的意图提供提示；Main 负责计划和回答；Reason 仅在 Main 失败/输出不合规时备用；Vision 预留给显式多模态入口。无论选用哪个模型，输出仍经过本地计划校验、RBAC、语义层和只读 SQL 校验。
+
+### Model Evaluation 与 Benchmark
+
+确定性 Golden 回归：`python3 scripts/run_evaluation.py`。真实单 Provider E2E 使用 Supabase PostgreSQL：`python3 scripts/run_llm_evaluation.py`。同一 Golden Dataset 的跨模型比较：
+
+```bash
+python3 scripts/run_model_benchmark.py --providers current,qwen --runs 1
+# 可增加重复次数，以平均成功率、延迟和 Token 衡量非确定性
+python3 scripts/run_model_benchmark.py --providers deepseek,qwen --runs 3
+```
+
+`current` 解析为当前 `LLM_PROVIDER`。默认在 PostgreSQL 上比较；Supabase 暂不可用时可明确指定 `--data-source duckdb` 做本地固定种子数据比较（报告会注明该数据源）。各模型使用相同的 35 个 Golden、Agent、Prompt、Tool、语义层、权限策略和选定数据源；输出 [Benchmark 报告](reports/model_benchmark.md)。成功率按现有 LLM Eval 的 Case 判定逻辑；平均/P95 延迟是完整 Agent Case 的端到端时间；调用数包含重试的物理模型请求；Token Usage 标记为 Provider 返回值、估算值或不可用；Fallback 包含备用模型调用及确定性回退。Cost 根据集中价格表和 Token Usage 估算，不是云平台账单；币种不同不进行外汇换算，未计价调用会单独标记。
 
 <a id="demo"></a>
 
@@ -265,8 +291,9 @@ python3 scripts/run_evaluation.py              # DuckDB 确定性回归
 python3 scripts/verify_project_consistency.py
 python3 scripts/smoke_query.py
 
-# Supabase 真实 LLM 端到端评测（需 DATA_SOURCE=postgresql、DATABASE_URL、SILICONFLOW_API_KEY）
+# Supabase 真实 LLM 端到端评测（需 DATA_SOURCE=postgresql、DATABASE_URL、所选 Provider 的 API Key）
 EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
+python3 scripts/run_model_benchmark.py --providers current,qwen --runs 1
 ```
 
 <a id="limitations"></a>
@@ -287,6 +314,7 @@ EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
 - [docs/solution-delivery-case.md](docs/solution-delivery-case.md)：模拟企业 Solution / Delivery Case
 - [docs/architecture.md](docs/architecture.md)：架构、安全与运行边界
 - [docs/evaluation.md](docs/evaluation.md)：Golden Dataset、指标口径与 LLM 评测
+- [reports/model_benchmark.md](reports/model_benchmark.md)：同一 Golden Dataset 上的多模型对比结果
 - [docs/deploy-render.md](docs/deploy-render.md)：Render + Supabase 部署与限制
 - [docs/operations.md](docs/operations.md)：故障、降级与运行检查
 - [docs/decisions/](docs/decisions/)：关键架构取舍记录

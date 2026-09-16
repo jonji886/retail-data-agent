@@ -80,7 +80,7 @@ Business Insight
 Evidence / Audit / Evaluation
 ```
 
-设计原则是：**Probabilistic AI outside, deterministic execution inside.** 硅基流动上的 Router 负责低成本意图提示，Main 负责结构化计划和自然语言表达，Reason 负责 Main 故障恢复，Vision 预留给多模态入口；权限、指标公式、范围收窄、SQL 构造、执行和安全边界由确定性系统控制。模型切换不改变执行边界。
+设计原则是：**Probabilistic AI outside, deterministic execution inside.** Provider-neutral Router 负责低成本意图提示，Main 负责结构化计划和自然语言表达，Reason 负责 Main 故障恢复，Vision 预留给多模态入口；DeepSeek、Qwen 或 SiliconFlow 的切换不改变由确定性系统控制的权限、指标公式、范围收窄、SQL 构造、执行和安全边界。
 
 ## 5. 系统集成方案
 

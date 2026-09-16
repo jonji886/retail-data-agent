@@ -177,11 +177,13 @@ class APITest(unittest.TestCase):
     def test_health_and_query_boundary(self) -> None:
         from app.api import app
         client = TestClient(app)
-        self.assertEqual(client.get("/health").json(), {"status": "ok"})
-        self.assertEqual(client.get("/ready").json()["status"], "ready")
-        response = client.post("/api/v1/query", json={
-            "user_id": "user_hq", "question": "本月各区域销售额", "use_llm": False,
-        })
+        # 不读取本地 .env 中配置的远程生产数据源；API 边界测试固定使用本地 DuckDB。
+        with patch.dict(os.environ, {"DATA_SOURCE": "duckdb"}):
+            self.assertEqual(client.get("/health").json(), {"status": "ok"})
+            self.assertEqual(client.get("/ready").json()["status"], "ready")
+            response = client.post("/api/v1/query", json={
+                "user_id": "user_hq", "question": "本月各区域销售额", "use_llm": False,
+            })
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertIn(body["status"], {"success", "failed"})

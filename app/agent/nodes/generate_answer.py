@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from app.agent.state import AgentState
+from app.llm.telemetry import call_records, deterministic_fallback_record
 from app.presentation.decision_support import build_attribution_summary, build_recommended_questions
 
 
@@ -35,41 +36,31 @@ def generate_answer(state: AgentState) -> AgentState:
     # 可选 LLM 润色：仅基于已提供的事实，不添加新数字
     if use_llm:
         if not _llm_available(root, llm_mode):
-            llm_calls.append({
-                "provider": "siliconflow", "role": "main", "node": "generate_answer",
-                "status": "fallback", "model": _configured_model(root, llm_mode),
-                "fallback_model": "deterministic", "reason": "provider_not_configured",
-            })
+            from app.llm.siliconflow_client import provider_status
+            status = provider_status(root)
+            llm_calls.append(deterministic_fallback_record(
+                provider=status.get("provider", "unknown"), role="main",
+                model=_configured_model(root, llm_mode), node="generate_answer",
+                error_type="provider_not_configured",
+            ))
         else:
             try:
-                llm_answer, metadata = _llm_summarize(
+                llm_answer, metadata, records = _llm_summarize(
                     root, intent, result, question, template_answer, llm_mode
                 )
                 if llm_answer:
                     answer = llm_answer
-                    llm_calls.append({
-                        "provider": metadata.get("provider", "siliconflow"),
-                        "role": metadata.get("role", "main"),
-                        "node": "generate_answer",
-                        "status": "success", "model": metadata.get("model", _configured_model(root, llm_mode)),
-                        "prompt_version": "v1",
-                        **metadata,
-                    })
+                    llm_calls.extend(records)
             except Exception as exc:  # noqa: BLE001
+                from app.llm.siliconflow_client import provider_status
                 metadata = getattr(exc, "llm_metadata", {})
-                llm_calls.append({
-                    "provider": metadata.get("provider", "siliconflow"),
-                    "role": metadata.get("role", "main"),
-                    "node": "generate_answer",
-                    "status": "fallback", "model": metadata.get("model", _configured_model(root, llm_mode)),
-                    "fallback_model": "deterministic", "reason": type(exc).__name__,
-                    "fallback_used": metadata.get("fallback_used", False),
-                    "fallback_attempted": metadata.get("fallback_attempted", False),
-                    "fallback_provider": metadata.get("fallback_provider"),
-                    "fallback_from_model": metadata.get("fallback_from_model") or metadata.get("fallback_from"),
-                    "provider_fallback_model": metadata.get("fallback_model"),
-                    "fallback_reason": metadata.get("fallback_reason") or metadata.get("fallback_error_type"),
-                })
+                llm_calls.extend(getattr(exc, "llm_call_records", []))
+                status = provider_status(root)
+                llm_calls.append(deterministic_fallback_record(
+                    provider=status.get("provider", "unknown"), role="main",
+                    model=status.get("main_model", _configured_model(root, llm_mode)),
+                    node="generate_answer", error_type=type(exc).__name__, metadata=metadata,
+                ))
                 # LLM 失败时使用模板回答
 
     events.append({
@@ -91,8 +82,8 @@ def generate_answer(state: AgentState) -> AgentState:
 
 
 def _llm_available(root: Path, mode: str = "demo") -> bool:
-    from app.llm.siliconflow_client import SiliconFlowConfig
-    return SiliconFlowConfig.is_configured(root, mode=mode)
+    from app.llm.siliconflow_client import ModelConfig
+    return ModelConfig.is_configured(root, mode=mode)
 
 
 def _configured_model(root: Path, mode: str = "demo") -> str:
@@ -101,11 +92,11 @@ def _configured_model(root: Path, mode: str = "demo") -> str:
 
 
 def _llm_summarize(root: Path, intent: str, result: Dict[str, Any],
-                   question: str, template: str, mode: str = "demo") -> tuple[str, Dict[str, Any]]:
-    """使用硅基流动基于已提供的事实生成总结。"""
-    from app.llm.siliconflow_client import SiliconFlowClient, SiliconFlowConfig
+                   question: str, template: str, mode: str = "demo") -> tuple[str, Dict[str, Any], list[Dict[str, Any]]]:
+    """使用当前 Provider 基于已提供的事实生成总结。"""
+    from app.llm.siliconflow_client import create_model_client, create_model_config
     import json
-    client = SiliconFlowClient(SiliconFlowConfig.from_env(root, mode=mode))
+    client = create_model_client(create_model_config(root, mode=mode))
     system_prompt = (
         "你是零售经营分析 Data Agent 的回答生成器。\n"
         "只能基于用户提供的已验证 JSON 事实生成中文总结，"
@@ -119,11 +110,10 @@ def _llm_summarize(root: Path, intent: str, result: Dict[str, Any],
     try:
         answer = client.complete_text(system_prompt, facts, max_tokens=600, role="main")
     except Exception as exc:  # noqa: BLE001
-        # 将 Provider failover 的最终审计元数据带回节点，避免双 Provider
-        # 都失败时只看到一个笼统的 deterministic fallback。
         setattr(exc, "llm_metadata", dict(client.last_call_metadata))
+        setattr(exc, "llm_call_records", call_records(client, "generate_answer", "answer-v1"))
         raise
-    return answer, client.last_call_metadata
+    return answer, client.last_call_metadata, call_records(client, "generate_answer", "answer-v1")
 
 
 def _safe_result(result: Dict[str, Any]) -> Dict[str, Any]:

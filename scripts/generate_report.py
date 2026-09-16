@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.llm.siliconflow_client import SiliconFlowClient, SiliconFlowConfig
+from app.llm.siliconflow_client import create_model_client, create_model_config
 from app.reporting.weekly_report import RetailReportBuilder
 
 
@@ -18,14 +18,14 @@ def main() -> None:
     parser.add_argument("--month", default="2025-11", help="报告月份 YYYY-MM")
     parser.add_argument("--region", default="华东", help="报告范围；不传则覆盖全部区域")
     parser.add_argument("--dimension", default="store_name", choices=["city_name", "store_name", "category_name", "brand_name", "channel_name"])
-    parser.add_argument("--llm", action="store_true", help="使用硅基流动 Main（失败时 Reason）组织报告文字")
+    parser.add_argument("--llm", action="store_true", help="使用当前 Model Provider 的 Main（失败时尝试 Reason）组织报告文字")
     parser.add_argument("--output", type=Path, help="可选：保存 Markdown 文件")
     args = parser.parse_args()
 
     context = RetailReportBuilder(ROOT).build_context(args.month, args.region or None, args.dimension)
     if args.llm:
-        client = SiliconFlowClient(SiliconFlowConfig.from_env(ROOT))
-        report = RetailReportBuilder.to_siliconflow_markdown(context, client)
+        client = create_model_client(create_model_config(ROOT))
+        report = RetailReportBuilder.to_model_markdown(context, client)
     else:
         report = RetailReportBuilder.to_markdown(context)
     if args.output:

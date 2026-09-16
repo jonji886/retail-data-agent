@@ -16,6 +16,8 @@ class WebAppInteractionTest(unittest.TestCase):
     TEST_ENV = {
         "DATA_SOURCE": "duckdb",
         "LLM_PROVIDER": "deepseek",
+        "DEEPSEEK_API_KEY": "",
+        "QWEN_API_KEY": "",
         "SILICONFLOW_API_KEY": "",
     }
 

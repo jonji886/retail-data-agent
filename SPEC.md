@@ -3,7 +3,7 @@
 ```
 Status: MVP
 Version: v1.0.0
-Last verified: 2026-08-24
+Last verified: 2026-09-16
 ```
 
 > 本文件描述当前已实现的 MVP 产品范围与验收标准，与 README / 代码 / 评测报告保持一致。
@@ -41,7 +41,7 @@ Last verified: 2026-08-24
 
 - 有状态编排图：`parse_request → policy_check → execute_skill → validate_result → generate_answer`，含 unsupported / denied / error 分支。
 - 查询计划（Query Plan）：intent / metric / dimensions / filters / time range / comparison 的结构化中间产物。
-- 双链路解析：确定性基线（NLQ Engine）+ 硅基流动 LLM 增强（需 `SILICONFLOW_API_KEY`）；Router 仅为无法确定的意图提供低成本提示，Main 负责计划与回答，Main 按有限重试仍失败或输出不合规时切换 Reason，全部失败后回退到确定性链路；Vision 预留给多模态入口，并记录角色、实际 model 与 fallback 原因。
+- 双链路解析：确定性基线（NLQ Engine）+ 可配置 LLM Provider（DeepSeek API、Qwen/阿里云百炼、SiliconFlow）；统一通过 OpenAI-compatible 客户端调用。Router 仅为无法确定的意图提供提示，Main 负责计划与回答，Main 失败或输出不合规时可切换 Reason，全部失败后回退到确定性链路；Vision 预留给显式多模态入口，并记录角色、实际 model 与 fallback 原因。
 
 ### 4.2 语义层与工具
 
@@ -69,8 +69,9 @@ Last verified: 2026-08-24
 
 - Golden Dataset：`configs/evaluation/golden_questions.json`，35 个用例，覆盖 9 类场景（normal / expression / trend / attribution / anomaly / report / boundary / permission / security）。
 - Evaluation 2.0：分层指标（Plan Accuracy、Executable Success Rate、Result Accuracy、Unsupported Reject Rate、Permission Safety Pass Rate、Security Defense Rate、Overall Pass Rate）。
-- LLM E2E 评测：默认通过硅基流动调用固定 Main 模型，并使用 Supabase PostgreSQL 验证公网近生产执行链路；Main 失败后尝试 Reason。记录 primary/actual provider、role、model、data_source、llm_calls 和 fallback，未配置 Supabase、硅基流动 Key 或固定 Main 模型时明确 SKIP 且不生成报告。
-- Demo / Evaluation 模型配置分离：Demo 使用 `ROUTER`、`MAIN`、`REASON`、`VISION`；Evaluation 可使用 `EVAL_LLM_MODEL` 固定 Main 评测模型。旧版 `MODEL_*` 与三变量仅作兼容读取。
+- LLM E2E 评测：使用所选 Provider 的固定 Main 模型，并使用 Supabase PostgreSQL 验证完整执行链路；Main 失败后尝试 Reason。记录 provider、role、model、data_source、逐次模型调用、Token、延迟、估算成本与 fallback；缺少数据源或凭证时明确 SKIP。
+- Model Benchmark：`scripts/run_model_benchmark.py` 复用同一 Golden Dataset，允许通过 `--providers` 和 `--runs` 对不同 Provider 做可重复比较，输出成功率、端到端延迟、Token、调用数、估算成本、错误与 fallback 至 Markdown 报告。
+- Provider / Evaluation 配置分离：Provider-scoped API Key、Base URL 与角色模型按 `DEEPSEEK_*`、`QWEN_*` 等命名；`LLM_PROVIDER` 选择 Provider，`EVAL_LLM_MODEL` 可固定评测 Main。历史变量仅作兼容读取。
 - API Boundary：FastAPI 提供 `/api/v1/query`、`/health`、`/ready`，与 Streamlit 共享 Application Service。
 - Demo quota：session/IP/global daily quota 在 LLM 请求前执行；Operational Metrics 记录请求、成功、失败、延迟、fallback、权限和数据源。
 - 相对时间策略：`过去/最近/近 N 个月`、自然月和滚动天数由 `app/domain/time_range.py` 统一解析，LLM 计划不能覆盖该规则。
@@ -90,7 +91,7 @@ Last verified: 2026-08-24
 ### 4.7 数据源与部署
 
 - `scripts/init_postgres.py` 完成 PostgreSQL/Supabase 的 schema creation、Demo data import、views、indexes 和 validation。
-- Render 配置支持 `DATA_SOURCE=postgresql`、`DATABASE_URL`、硅基流动四角色模型配置和 Demo quota；启动前执行语义层与数据源健康检查。
+- Render 配置支持 `DATA_SOURCE=postgresql`、`DATABASE_URL`、可选 Model Provider 配置和 Demo quota；启动前执行语义层与数据源健康检查。
 
 ### 4.8 数据
 

@@ -63,7 +63,8 @@ FastAPI API ──┘                                  ↓
                                                    ↓
                               DataSourceBase → DuckDB / PostgreSQL
 
-LLM：Application Service → 硅基流动 → Router（必要时）→ Main → Reason → 确定性 fallback；Vision 由多模态入口显式选择
+LLM：Application Service → Provider Registry → OpenAI-compatible Client → DeepSeek / Qwen / SiliconFlow
+     Router（必要时）→ Main → Reason → 确定性 fallback；Vision 由多模态入口显式选择
 横切：Trace / Audit / Metrics / Quota / Retry / Fallback / Evaluation
 ```
 
@@ -178,9 +179,10 @@ PostgreSQL 由连接参数提供 statement timeout；DuckDB 当前提供资源�
 ### 两条链路
 
 - Deterministic Baseline：`scripts/run_evaluation.py`（无 API Key 可运行）
-- LLM E2E：`scripts/run_llm_evaluation.py`（通过硅基流动调用固定 Main 模型，使用 Supabase PostgreSQL；Main 失败后切换 Reason；无 Supabase / SiliconFlow Key / 固定 Main 模型则 skip）
+- LLM E2E：`scripts/run_llm_evaluation.py`（通过所选 Provider 调用固定 Main 模型，使用 Supabase PostgreSQL；Main 失败后切换 Reason；缺少 PostgreSQL / Provider Key / 固定模型则 skip）
+- Model Benchmark：`scripts/run_model_benchmark.py`（同一 Golden Dataset、Agent 图与 PostgreSQL 数据源比较不同 Provider，输出成功率、端到端延迟、Token、估算成本与可靠性报告）
 
-硅基流动通过 OpenAI-compatible Chat Completions 接口调用。Router 只在确定性规则无法识别意图时提供受限枚举提示；Main 按
+DeepSeek、Qwen 与 SiliconFlow 均通过 OpenAI-compatible Chat Completions 接口调用。Router 只在确定性规则无法识别意图时提供受限枚举提示；Main 按
 `LLM_MAX_RETRIES` 有限重试仍超时或报错时切换 Reason。Reason 失败，或结构化输出经最多一次补请求仍非法时，回退到确定性基线。
 Vision 只由未来多模态入口显式选择，不参与普通文本 fallback。
 无论由哪个 Provider 生成计划，都必须经过本地计划校验、相对时间策略、RBAC、语义层

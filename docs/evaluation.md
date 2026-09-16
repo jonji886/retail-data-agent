@@ -1,6 +1,6 @@
 # Evaluation（评测体系）
 
-> 评测入口：`scripts/run_evaluation.py`（确定性）与 `scripts/run_llm_evaluation.py`（LLM 增强）。
+> 评测入口：`scripts/run_evaluation.py`（确定性）、`scripts/run_llm_evaluation.py`（单 Provider LLM E2E）与 `scripts/run_model_benchmark.py`（多 Provider 对比）。
 > 一致性校验：`scripts/verify_project_consistency.py`。
 
 ## 1. Evaluation Goals
@@ -90,16 +90,31 @@ Executable Success Rate = 100%（27/27，仅统计期望执行的用例）
 
 ### LLM-enabled Evaluation（`run_llm_evaluation.py`）
 
-- 默认通过硅基流动真实调用固定 `MAIN` 构建 Query Plan；确定性规则无法识别的请求才会先调用低成本 `ROUTER`，Main 超时/错误并完成有限重试后切换 `REASON`；Reason 失败才进入确定性 fallback。`VISION` 仅为未来多模态入口预留；
+- 通过 `LLM_PROVIDER` 选择 DeepSeek API、Qwen（阿里云百炼）或 SiliconFlow，并真实调用固定 Main 构建 Query Plan；确定性规则无法识别的请求才会先调用低成本 Router，Main 超时/错误并完成有限重试后切换 Reason；Reason 失败才进入确定性 fallback。Vision 仅为未来多模态入口预留；
 - 强制使用 `DATA_SOURCE=postgresql` 的 Supabase PostgreSQL 数据源，覆盖 Query Plan → 权限 → Skill → 语义层 → 受控 SQL → Result 的公网近生产链路；若未配置 Supabase，脚本明确 SKIP 且不生成报告；
-- Main 默认使用 `MAIN`，也可配置 `EVAL_LLM_MODEL` 固定评测模型；每条调用记录 `role` 与实际模型。
+- Main 使用 Provider 专属角色模型（如 `QWEN_MAIN_MODEL` / `DEEPSEEK_MAIN_MODEL`），也可配置 `EVAL_LLM_MODEL` 固定评测模型；每条物理调用记录 `role` 与实际模型。
 - 报告记录：`provider`、`model`、`data_source=postgresql`、`evaluation_timestamp`、`case_count`、`pass_count`、`pass_rate`、`llm_calls`、`fallback_count`、`fallback_case_count`、`fallback_rate`、`latency_ms`、token usage 和 `estimated_cost`；`fallback_rate` 按发生过切换的用例数 / 总用例数计算；每条调用还记录实际 provider、`fallback_used`、`fallback_from_model`、`fallback_model` 与 `fallback_reason`；
-- 未配置 `SILICONFLOW_API_KEY` 时**明确 SKIP 且不生成报告**，禁止输出"0 calls / 100% pass"的误导结果；
+- 未配置当前 Provider 的 API Key 或固定 Main 时**明确 SKIP 且不生成报告**，禁止输出"0 calls / 100% pass"的误导结果；
 - 输出 `reports/llm_evaluation_report.json`。
 
 两条链路不混合：Deterministic Regression 是 GitHub Actions 的阻断门禁；Real
 LLM E2E 只在手动 workflow 或本地显式运行时调用 API。未配置 Key 时脚本会明确
 SKIP 且不生成报告，手动 workflow 会在执行前因缺少 Secret 失败。
+
+### Model Benchmark（`run_model_benchmark.py`）
+
+```bash
+python3 scripts/run_model_benchmark.py --providers current,qwen --runs 1
+```
+
+若 Supabase PostgreSQL 当前不可用，可明确指定本地固定种子数据进行同源比较：`python3 scripts/run_model_benchmark.py --providers current,qwen --data-source duckdb`。报告会标注数据源；这不替代 PostgreSQL 近生产 E2E 结果。
+
+- `current` 解析为当前 `LLM_PROVIDER`；重复运行 `--runs N` 后，每个模型的用例数按 N 倍统计。
+- 各 Provider 使用相同 Golden Dataset、Agent 图、Prompt、Tool、语义层、权限策略及同一个 Supabase PostgreSQL 数据源。Provider-specific Main model 用于显式固定本轮模型，不修改业务配置。
+- 成功率沿用本文件中 LLM E2E 的 Case 判定；平均和 P95 延迟按完整 Agent Case 计算。LLM 调用数统计物理请求，重试也计数；错误率以失败的物理请求 / 全部物理请求计算。
+- Fallback 次数包含 Reason 等备用模型调用和确定性回退事件。Token 优先使用 Provider Usage；缺失时估算并在 `usage_source` 中标记；错误响应没有可靠输出 Token 时不估算 Cost。
+- Cost 按 `configs/models/model_pricing.json` 中的公开价格与 Token Usage 估算，非账单金额。DeepSeek 与 Qwen 当前计价币种不同，报告不做汇率转换；价格缺项或 Token 不完整的调用记为 unpriced。
+- Markdown 报告写入 `reports/model_benchmark.md`，含总体结果、可靠性、失败用例和仅由本次数据生成的客观结论。缺少 Provider Key 时该 Provider 明确标记 SKIP，不伪造零值结果。
 
 ### Relative Time Policy
 

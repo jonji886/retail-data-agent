@@ -71,16 +71,21 @@ DATABASE_URL=<supabase-postgresql-url>
 在 Supabase 初始化数据后，再在 Render 的 Environment 中配置：
 
 ```text
-LLM_PROVIDER=siliconflow
-SILICONFLOW_API_KEY=<your-api-key>
-SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1
-ROUTER=<low-cost-router-model>
-MAIN=deepseek-ai/DeepSeek-V4-Flash
-REASON=Pro/zai-org/GLM-5.1
-VISION=<siliconflow-vision-model>
-EVAL_LLM_MODEL=<fixed-model-only-for-manual-evaluation>
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=<your-api-key>
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MAIN_MODEL=deepseek-flash
+# Optional role models
+DEEPSEEK_ROUTER_MODEL=<router-model>
+DEEPSEEK_REASONING_MODEL=<reason-model>
+# Or choose Qwen instead
+# LLM_PROVIDER=qwen
+# QWEN_API_KEY=<your-api-key>
+# QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+# QWEN_MAIN_MODEL=qwen3.8-flash
+EVAL_LLM_MODEL=
 LLM_TIMEOUT_SECONDS=60
-LLM_MAX_TOKENS=1200
+LLM_MAX_OUTPUT_TOKENS=1200
 LLM_MAX_RETRIES=1
 DEMO_RATE_LIMIT_ENABLED=true
 DEMO_SESSION_LIMIT=10
@@ -88,11 +93,11 @@ DEMO_IP_DAILY_LIMIT=20
 DEMO_GLOBAL_DAILY_LIMIT=40
 ```
 
-`DATABASE_URL`、`SILICONFLOW_API_KEY` 和 `EVAL_LLM_MODEL` 不能写入仓库。保存环境变量后需要执行一次 **Manual Deploy → Deploy latest commit**，新进程才会读取配置。治理后台会显示硅基流动、首选模型、模型可用性和备选模型状态。
+`DATABASE_URL`、Provider API Key 和 `EVAL_LLM_MODEL` 不能写入仓库。保存环境变量后需要执行一次 **Manual Deploy → Deploy latest commit**，新进程才会读取配置。治理后台会显示当前 Provider、首选模型、可用性和备选模型状态。已有 SiliconFlow 环境仍可继续使用 `LLM_PROVIDER=siliconflow` 与 `SILICONFLOW_API_KEY`。
 
 Render 生产容器通过 `--server.fileWatcherType=none` 关闭 Streamlit 开发态文件监听。这样不影响用户点击后的脚本重跑，但可以避免 Free 实例因 watchdog / inotify 实例上限导致页面交互异常；本地开发仍可直接使用默认文件监听。
 
-模型调用费用由硅基流动账户承担，Render Free 不包含任何模型调用额度。无法由确定性规则识别的意图才会调用低成本 Router；文本链路先走 Main，按 `LLM_MAX_RETRIES` 有限重试仍超时或报错时切换 Reason；Reason 也失败后才回退确定性结果。Vision 目前仅作为多模态配置预留，不参与文本 fallback。LLM 只生成结构化查询计划或文字表达，权限、指标口径、SQL 和计算仍由本地链路负责；治理后台会标记实际角色、模型与 fallback reason。
+模型调用费用由所选 Provider 账户承担，Render Free 不包含模型调用额度。无法由确定性规则识别的意图才会调用 Router；文本链路先走 Main，按 `LLM_MAX_RETRIES` 有限重试仍超时或报错时切换 Reason；Reason 也失败后才回退确定性结果。Vision 目前仅作为多模态配置预留，不参与文本 fallback。LLM 只生成结构化查询计划或文字表达，权限、指标口径、SQL 和计算仍由本地链路负责；治理后台会标记实际角色、模型与 fallback reason。
 
 ## 4. 部署后验证
 
@@ -104,7 +109,7 @@ Render 生产容器通过 `--server.fileWatcherType=none` 关闭 Streamlit 开�
 4. 在治理后台的 Evaluation 视图查看确定性评测结果；
 5. 观察 Deploy Logs 是否出现 PostgreSQL 启动校验和 Streamlit 启动日志。
 
-建议首次部署时先完成 Supabase 初始化并关闭 LLM，确认容器、端口、PostgreSQL 和权限链路正常后，再配置 SiliconFlow API Key；随后用故障注入或临时不可用 Main 验证 Reason failover 记录，并确认 Router 只影响无法确定意图的请求。
+建议首次部署时先完成 Supabase 初始化并关闭 LLM，确认容器、端口、PostgreSQL 和权限链路正常后，再配置所选 Provider API Key；随后用故障注入或临时不可用 Main 验证 Reason failover 记录，并确认 Router 只影响无法确定意图的请求。
 
 ## 5. 常见问题
 
@@ -116,9 +121,9 @@ Render 生产容器通过 `--server.fileWatcherType=none` 关闭 Streamlit 开�
 
 这是 Render Free 临时文件系统的预期行为，不是应用查询链路错误。需要长期保存时，应把审计写入外部数据库或对象存储；这属于后续架构改造。
 
-### 硅基流动首选模型失败
+### 当前 Model Provider 首选模型失败
 
-检查 `LLM_PROVIDER=siliconflow`、`SILICONFLOW_API_KEY`、`SILICONFLOW_BASE_URL` 和 `ROUTER` / `MAIN` / `REASON` / `VISION` 是否配置，以及硅基流动 API 是否可访问；查看 Trace 中的 `role`、`fallback_used`、`fallback_from_model`、`fallback_model` 和 `fallback_reason`。Render 和本项目的免费部署不包含模型调用费用。
+检查 `LLM_PROVIDER`、所选 Provider 对应的 API Key、Base URL 和角色模型配置是否匹配（DeepSeek 使用 `DEEPSEEK_*`，Qwen 使用 `QWEN_*`，SiliconFlow 使用 `SILICONFLOW_*`），以及所选 API 是否可访问；查看 Trace 中的 `role`、`fallback_used`、`fallback_from_model`、`fallback_model` 和 `fallback_reason`。Render 和本项目的免费部署不包含模型调用费用。
 
 ### 如何初始化 Supabase
 

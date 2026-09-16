@@ -113,4 +113,4 @@ A：数据是固定种子的虚拟数据；本地/CI 使用 DuckDB，公网近�
 A：本地/CI 仍使用 DuckDB 保持可复现性；作品集部署路径已支持 Supabase PostgreSQL。两者通过 `DataSourceBase` 复用同一语义层、权限和只读查询边界，避免把本地评测与公网运行环境混在一起。
 
 **Q：LLM 评测是怎么做的？**
-A：`run_llm_evaluation.py` 默认通过硅基流动真实调用固定 `MAIN`，并记录 primary/actual provider、role、model、llm_calls 和 fallback_rate。Main 超时或报错后切换 `REASON`；Reason 也失败才走确定性 fallback。没有硅基流动 Key 或固定 Main 模型时明确 SKIP，不生成假报告。
+A：`run_llm_evaluation.py` 使用 `LLM_PROVIDER` 选择的 Provider 调用固定 Main，并记录 primary/actual provider、role、model、物理模型调用数和 fallback_rate。Main 超时或报错后可切换 Reason；Reason 也失败才走确定性 fallback。跨模型比较运行 `scripts/run_model_benchmark.py`，缺少当前 Provider Key 时明确 SKIP，不生成假报告。

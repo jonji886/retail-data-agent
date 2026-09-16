@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "currency": "CNY",
+  "unit": "per_1m_tokens",
+  "provider_currencies": {
+    "siliconflow": "CNY",
+    "deepseek": "USD",
+    "qwen": "CNY"
+  },
+  "sources": {
+    "deepseek": {
+      "url": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "checked_at": "2026-09-16",
+      "note": "deepseek-flash official peak rates, cache-miss input and output; benchmark reports conservative peak cost."
+    },
+    "qwen": {
+      "url": "https://help.aliyun.com/zh/model-studio/qwen3-8-flash",
+      "checked_at": "2026-09-16",
+      "note": "Qwen3.8-Flash official Beijing region standard input/output rates; cache discounts excluded."
+    },
+    "siliconflow": {
+      "url": "https://docs.siliconflow.cn/docs/release-notes/overview",
+      "checked_at": "2026-09-16",
+      "note": "DeepSeek-V4-Flash standard non-cache daytime rates; not the 02:00-08:00 lower rate."
+    }
+  },
+  "note": "价格单位为每 100 万 Token（input/output 分开）。仅用于估算成本展示，非云平台账单；不计缓存折扣、免费额度与账户优惠。多币种 Provider 的成本不直接进行外汇换算。未配置的模型 estimated_cost 输出为 null，不伪造数字。",
+  "models": {
+    "deepseek": {
+      "deepseek-flash": { "input": 0.3, "output": 1.2 },
+      "deepseek-v4-flash": { "input": 0.3, "output": 1.2 },
+      "_default": { "input": null, "output": null }
+    },
+    "siliconflow": {
+      "deepseek-ai/DeepSeek-V4-Flash": { "input": 3.0, "output": 9.0 },
+      "Pro/zai-org/GLM-5.1": { "input": null, "output": null },
+      "_default": { "input": null, "output": null }
+    },
+    "qwen": {
+      "qwen3.8-flash": { "input": 0.8, "output": 2.7 },
+      "qwen-turbo": { "input": 0.3, "output": 0.6 },
+      "qwen-plus": { "input": 0.8, "output": 2.0 },
+      "qwen-max": { "input": 2.4, "output": 9.6 },
+      "_default": { "input": null, "output": null }
+    }
+  }
+}

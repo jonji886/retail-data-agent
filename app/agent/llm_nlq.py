@@ -1,4 +1,4 @@
-"""使用硅基流动模型解析自然语言，再交给确定性语义层执行。"""
+"""使用配置的 Model Provider 解析自然语言，再交给确定性语义层执行。"""
 
 from __future__ import annotations
 
@@ -11,20 +11,25 @@ from typing import Any, Dict, Mapping
 from app.agent.nlq import DateRange, NLQError, NaturalLanguageQueryEngine, ParsedQuestion
 from app.data_sources.base import DataSourceBase
 from app.domain.time_range import resolve_relative_time
-from app.llm.siliconflow_client import SiliconFlowClient, SiliconFlowConfig
+from app.llm.siliconflow_client import (
+    SiliconFlowClient,
+    SiliconFlowConfig,
+    create_model_client,
+    create_model_config,
+)
 
 
 class LLMPlanError(NLQError):
     """大模型计划格式或内容不符合语义层约束。"""
 
 
-class SiliconFlowNLQEngine:
+class LLMNLQEngine:
     def __init__(self, root: Path, data_source: DataSourceBase | None = None,
                  mode: str = "demo") -> None:
         self.root = root
         self.deterministic = NaturalLanguageQueryEngine(root, data_source=data_source)
-        self.config = SiliconFlowConfig.from_env(root, mode=mode)
-        self.client = SiliconFlowClient(self.config)
+        self.config = create_model_config(root, mode=mode)
+        self.client = create_model_client(self.config)
 
     def parse(self, question: str) -> ParsedQuestion:
         """调用主 Provider 生成计划，再通过本地规则完成严格校验。"""
@@ -172,3 +177,7 @@ class SiliconFlowNLQEngine:
             return date.fromisoformat(value)
         except ValueError as exc:
             raise LLMPlanError("%s 不是有效日期" % field) from exc
+
+
+# 兼容现有调用方；Agent 业务已通过通用 Model Provider 工厂初始化。
+SiliconFlowNLQEngine = LLMNLQEngine

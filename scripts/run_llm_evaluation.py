@@ -31,8 +31,9 @@ from app.config import DataSourceConfig
 from app.data_sources.base import DataSourceBase
 from app.data_sources.factory import create_data_source
 from app.config import load_env_file
-from app.llm.siliconflow_client import SiliconFlowConfig
+from app.llm.siliconflow_client import ModelConfig
 from app.quality.evaluation import _load_cases
+from app.quality.llm_evaluation import check_case, check_ground_truth
 
 REPORT_PATH = ROOT / "reports" / "llm_evaluation_report.json"
 
@@ -42,9 +43,9 @@ def _llm_entries(state: Dict[str, Any]) -> List[Dict[str, Any]]:
     return list(state.get("llm_calls", []))
 
 
-def _count_success_calls(entries: List[Dict[str, Any]]) -> int:
-    """真实完成的 LLM 调用次数（status=success）。"""
-    return sum(1 for e in entries if e.get("status") == "success")
+def _count_model_calls(entries: List[Dict[str, Any]]) -> int:
+    """统计真实物理模型请求；一次重试也单独计数。"""
+    return sum(1 for entry in entries if entry.get("is_model_call", entry.get("status") != "fallback"))
 
 
 def _count_fallbacks(entries: List[Dict[str, Any]]) -> int:
@@ -54,79 +55,6 @@ def _count_fallbacks(entries: List[Dict[str, Any]]) -> int:
         or e.get("fallback_used")
         or e.get("provider_fallback_used")
     ))
-
-
-def _check_case(state: Dict[str, Any], case: Dict[str, Any]) -> Tuple[bool, List[str]]:
-    """按用例预期行为判定 PASS，与确定性评测语义一致：
-    - 拒绝类：intent=unsupported 且不发生工具执行
-    - 权限拒绝：permission=deny 且不发生工具执行
-    - 权限允许：permission=allow + 预期 filter + 执行成功
-    - 常规/归因/异常/报告：intent 正确 + 无错误 + 执行成功
-    返回 (passed, 原因列表)。
-    """
-    errors: List[str] = []
-    intent = state.get("intent")
-    if case.get("should_reject"):
-        if intent != "unsupported":
-            errors.append("should_reject but intent=%s" % intent)
-        if state.get("tool_calls"):
-            errors.append("expected no tool execution but got tool_calls")
-        return not errors, errors
-    if case.get("should_deny"):
-        if state.get("permission_decision") != "deny":
-            errors.append("should_deny but permission=%s" % state.get("permission_decision"))
-        if state.get("tool_calls"):
-            errors.append("expected no tool execution but got tool_calls")
-        return not errors, errors
-    if case.get("should_allow"):
-        if state.get("permission_decision") != "allow":
-            errors.append("should_allow but permission=%s" % state.get("permission_decision"))
-        result = state.get("result") or {}
-        if not result.get("success"):
-            errors.append("allowed query execution failed: %s" % result.get("error_message"))
-        plan = state.get("query_plan", {})
-        for k, v in case.get("expected_filter", {}).items():
-            if plan.get("filters", {}).get(k) != v:
-                errors.append("expected_filter %s=%s but got %s" % (k, v, plan.get("filters", {}).get(k)))
-        return not errors, errors
-
-    expected = case.get("intent")
-    if case.get("baseline_only"):
-        if intent not in ("metric_query", "trend_analysis"):
-            errors.append("intent=%s expected metric_query/trend_analysis" % intent)
-    elif expected == "trend_analysis":
-        # 趋势类问题允许 metric_query / trend_analysis 两种合法 plan intent
-        if intent not in ("metric_query", "trend_analysis"):
-            errors.append("intent=%s expected metric_query/trend_analysis" % intent)
-    elif expected and intent != expected:
-        errors.append("intent=%s expected=%s" % (intent, expected))
-
-    if state.get("error_type"):
-        errors.append("error_type=%s: %s" % (state.get("error_type"), state.get("error_message")))
-    result = state.get("result") or {}
-    if expected in ("attribution_analysis", "anomaly_analysis", "report_generation"):
-        if not result.get("success"):
-            errors.append("skill failed: %s" % result.get("error_message"))
-    elif not result.get("success"):
-        errors.append("query execution failed: %s" % result.get("error_message"))
-    return not errors, errors
-
-
-def _check_ground_truth(state: Dict[str, Any], case: Dict[str, Any]) -> Tuple[bool, str]:
-    """可选的 ground truth 数值校验（存在时检查行数与聚合值）。"""
-    gt = case.get("ground_truth")
-    if not gt:
-        return True, ""
-    result = state.get("result") or {}
-    rows = result.get("rows") or []
-    tolerance = gt.get("tolerance", 0.01)
-    if gt.get("row_count") is not None and len(rows) != gt["row_count"]:
-        return False, "row_count=%d expected=%d" % (len(rows), gt["row_count"])
-    if gt.get("value") is not None:
-        actual = sum(float(r.get("value") or r.get("current_value") or 0) for r in rows)
-        if abs(actual - gt["value"]) > tolerance:
-            return False, "value=%.2f expected=%.2f" % (actual, gt["value"])
-    return True, ""
 
 
 def _delete_stale_report() -> None:
@@ -153,13 +81,13 @@ def _create_evaluation_source() -> DataSourceBase:
 
 def main() -> int:
     load_env_file(ROOT / ".env")
-    if not SiliconFlowConfig.is_configured(ROOT, mode="evaluation"):
+    if not ModelConfig.is_configured(ROOT, mode="evaluation"):
         _delete_stale_report()
-        print("SKIP: 未配置 SILICONFLOW_API_KEY 或可用固定模型，LLM E2E 评测跳过（不会生成报告）。")
+        print("SKIP: 未配置当前 Provider 的 API Key 或固定评测模型，LLM E2E 评测跳过（不会生成报告）。")
         print("确定性 baseline 评测请运行: python3 scripts/run_evaluation.py")
         return 0
 
-    config = SiliconFlowConfig.from_env(ROOT, mode="evaluation")
+    config = ModelConfig.from_env(ROOT, mode="evaluation")
     model = config.model
     cases = _load_cases(ROOT)
     try:
@@ -179,6 +107,12 @@ def main() -> int:
     total_latency = 0.0
     input_tokens = 0
     output_tokens = 0
+    total_tokens = 0
+    successful_llm_calls = 0
+    error_calls = 0
+    cost_values: List[float] = []
+    unpriced_calls = 0
+    usage_sources: Dict[str, int] = {}
     plan_correct = 0
     executable_cases = 0
     exec_success = 0
@@ -197,15 +131,29 @@ def main() -> int:
         total_latency += latency
 
         entries = _llm_entries(state)
-        llm_calls = _count_success_calls(entries)
+        physical_calls = [
+            entry for entry in entries
+            if entry.get("is_model_call", entry.get("status") != "fallback")
+        ]
+        llm_calls = len(physical_calls)
         fallback = _count_fallbacks(entries)
         total_llm_calls += llm_calls
+        successful_llm_calls += sum(bool(entry.get("success", entry.get("status") == "success")) for entry in physical_calls)
+        error_calls += sum(not bool(entry.get("success", entry.get("status") == "success")) for entry in physical_calls)
         total_fallbacks += fallback
         if fallback:
             fallback_cases += 1
-        for entry in entries:
+        for entry in physical_calls:
             input_tokens += int(entry.get("input_tokens") or 0)
             output_tokens += int(entry.get("output_tokens") or 0)
+            if entry.get("total_tokens") is not None:
+                total_tokens += int(entry["total_tokens"])
+            source_name = str(entry.get("usage_source") or "unknown")
+            usage_sources[source_name] = usage_sources.get(source_name, 0) + 1
+            if entry.get("estimated_cost") is None:
+                unpriced_calls += 1
+            else:
+                cost_values.append(float(entry["estimated_cost"]))
 
         intent_ok = state.get("intent") == case.get("intent")
         if case.get("baseline_only") or case.get("intent") == "trend_analysis":
@@ -213,8 +161,8 @@ def main() -> int:
         if intent_ok:
             plan_correct += 1
 
-        passed, case_errors = _check_case(state, case)
-        gt_ok, gt_error = _check_ground_truth(state, case)
+        passed, case_errors = check_case(state, case)
+        gt_ok, gt_error = check_ground_truth(state, case)
         if passed and not gt_ok:
             passed = False
             case_errors.append("ground_truth mismatch: %s" % gt_error)
@@ -231,7 +179,10 @@ def main() -> int:
             "passed": passed, "intent": state.get("intent"),
             "permission_decision": state.get("permission_decision"),
             "latency_ms": int(latency * 1000),
-            "llm_calls": llm_calls, "fallback": fallback > 0,
+            "llm_calls": llm_calls,
+            "successful_llm_calls": sum(bool(entry.get("success", entry.get("status") == "success")) for entry in physical_calls),
+            "error_calls": sum(not bool(entry.get("success", entry.get("status") == "success")) for entry in physical_calls),
+            "fallback": fallback > 0,
             "llm_providers": [entry.get("provider") for entry in entries if entry.get("provider")],
             "llm_roles": [entry.get("role") for entry in entries if entry.get("role")],
             "primary_provider": config.provider,
@@ -262,7 +213,9 @@ def main() -> int:
     fallback_rate = fallback_cases / len(results) if results else 0
     print("\nLLM E2E Result: %d/%d passed" % (passed, len(results)))
     print("Model: %s" % model)
-    print("Total LLM calls: %d" % total_llm_calls)
+    print("Total physical LLM calls: %d (success=%d, errors=%d)" % (
+        total_llm_calls, successful_llm_calls, error_calls,
+    ))
     print("Fallback count: %d (rate=%.2f)" % (total_fallbacks, fallback_rate))
     print("Total latency: %.1fs" % total_latency)
     failed = [r for r in results if not r["passed"]]
@@ -300,8 +253,18 @@ def main() -> int:
         "latency_ms": int(total_latency * 1000),
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
-        "total_tokens": input_tokens + output_tokens,
-        "estimated_cost": None,
+        "total_tokens": total_tokens,
+        "successful_llm_calls": successful_llm_calls,
+        "error_calls": error_calls,
+        "error_rate": error_calls / total_llm_calls if total_llm_calls else None,
+        "usage_sources": usage_sources,
+        "estimated_cost": round(sum(cost_values), 9) if cost_values else None,
+        "estimated_cost_currency": next((
+            entry.get("cost_currency") for item in results for entry in _llm_entries(item)
+            if entry.get("estimated_cost") is not None
+        ), None),
+        "estimated_cost_complete": bool(total_llm_calls) and unpriced_calls == 0,
+        "unpriced_calls": unpriced_calls,
         "results": results,
     }
     evaluation_source.close()

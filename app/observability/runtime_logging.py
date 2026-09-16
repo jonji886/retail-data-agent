@@ -70,6 +70,11 @@ def request_log_context(**fields: Any) -> Iterator[Dict[str, Any]]:
         _CONTEXT.reset(token)
 
 
+def current_request_context() -> Dict[str, Any]:
+    """返回当前请求的安全关联字段，供 LLM 调用明细复用。"""
+    return dict(_CONTEXT.get())
+
+
 def log_event(event: str, **fields: Any) -> None:
     """向 Render 输出可搜索的单行 JSON 日志。"""
     payload = {"event": event, **_CONTEXT.get(), **_safe_fields(dict(fields))}

@@ -219,19 +219,32 @@ def main() -> int:
     else:
         print("  OK: README Web tabs 与 web_app.py 一致")
 
-    # 4b. Provider 默认值：配置、README 与主客户端必须一致。
-    print("4b) Primary LLM Model:")
+    # 4b. Provider 默认值与标准配置模板必须一致。
+    print("4b) Primary LLM Provider:")
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
     provider_match = re.search(r"^LLM_PROVIDER=(\S+)", env_example, re.MULTILINE)
     default_provider = provider_match.group(1).lower() if provider_match else ""
-    required_roles = ("ROUTER", "MAIN", "REASON", "VISION")
-    missing_roles = [role for role in required_roles if not re.search(r"^%s=\S+" % role, env_example, re.MULTILINE)]
-    if default_provider != "siliconflow" or status.get("Primary LLM Model") != "DeepSeek（硅基流动）" or missing_roles:
-        print("  [FAIL] SiliconFlow 四角色配置或默认模型不一致（provider=%s, README=%s, missing=%s）" % (
-            default_provider, status.get("Primary LLM Model"), missing_roles))
+    main_match = re.search(r"^DEEPSEEK_MAIN_MODEL=(\S+)", env_example, re.MULTILINE)
+    configured_main = main_match.group(1) if main_match else ""
+    expected_primary = "DeepSeek/%s" % configured_main
+    required_keys = (
+        "LLM_MODEL", "LLM_MAIN_MODEL", "LLM_ROUTER_MODEL", "LLM_REASONING_MODEL",
+        "LLM_VISION_MODEL", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MAIN_MODEL",
+        "QWEN_API_KEY", "QWEN_BASE_URL", "QWEN_MAIN_MODEL", "LLM_MAX_OUTPUT_TOKENS",
+    )
+    missing_keys = [key for key in required_keys if not re.search(r"^%s=" % key, env_example, re.MULTILINE)]
+    supported_providers = {"deepseek", "qwen", "siliconflow"}
+    if (
+        default_provider not in supported_providers
+        or not configured_main
+        or status.get("Primary LLM Model") != expected_primary
+        or missing_keys
+    ):
+        print("  [FAIL] Provider 默认值/配置模板/README 不一致（provider=%s, README=%s, missing=%s）" % (
+            default_provider, status.get("Primary LLM Model"), missing_keys))
         errors.append("Primary LLM Model 漂移")
     else:
-        print("  OK: SiliconFlow ROUTER/MAIN/REASON/VISION 配置存在，MAIN 为默认主力模型")
+        print("  OK: DeepSeek 默认值、DeepSeek/Qwen 凭证模型变量与通用角色配置存在")
 
     # 5. LLM 报告可信度
     print("5) LLM evaluation report:")

@@ -10,14 +10,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.agent.llm_nlq import SiliconFlowNLQEngine
+from app.agent.llm_nlq import LLMNLQEngine
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="硅基流动模型中文问数（Main → Reason；Router 仅做意图提示）")
+    parser = argparse.ArgumentParser(description="使用当前配置的 Model Provider 中文问数（Main → Reason）")
     parser.add_argument("question", nargs="+", help="中文经营分析问题")
     args = parser.parse_args()
-    answer = SiliconFlowNLQEngine(ROOT).answer(" ".join(args.question))
+    answer = LLMNLQEngine(ROOT).answer(" ".join(args.question))
     print("模型：%s" % answer.parsed.metric.display_name)
     print("解析：维度=%s，过滤=%s，时间=%s，对比=%s" % (
         answer.parsed.dimensions or "整体",
