@@ -47,6 +47,68 @@ def _positive_int(name: str, default: int) -> int:
     return value
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    """读取布尔环境变量，并对非法值给出明确错误。"""
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    raise RuntimeError("%s 必须是 true/false" % name)
+
+
+_CHECKPOINT_NODES = {
+    "parse_request", "policy_check", "execute_skill", "validate_result",
+    "generate_answer", "audit", "unsupported_response", "permission_denied",
+    "error_response",
+}
+
+
+@dataclass(frozen=True)
+class CheckpointConfig:
+    """LangGraph Checkpoint 与 Demo 故障注入配置。
+
+    该配置只描述基础设施行为；Agent 节点不直接读取 SQLite 配置。
+    """
+
+    enabled: bool = True
+    backend: str = "memory"
+    db_path: Path = Path("data/checkpoints.db")
+    failure_injection_enabled: bool = False
+    fail_after_node: str = ""
+
+    @classmethod
+    def from_env(cls, root: Path) -> "CheckpointConfig":
+        load_env_file(root / ".env")
+        enabled = _env_bool("CHECKPOINT_ENABLED", True)
+        backend = os.getenv("CHECKPOINT_BACKEND", "memory").strip().lower() or "memory"
+        if backend not in {"memory", "sqlite"}:
+            raise RuntimeError("CHECKPOINT_BACKEND 仅支持 memory 或 sqlite")
+
+        db_path = Path(os.getenv("CHECKPOINT_DB_PATH", "data/checkpoints.db"))
+        if not db_path.is_absolute():
+            db_path = root / db_path
+
+        failure_enabled = _env_bool("FAILURE_INJECTION_ENABLED", False)
+        fail_after_node = os.getenv("FAIL_AFTER_NODE", "").strip()
+        if failure_enabled and not enabled:
+            raise RuntimeError("FAILURE_INJECTION_ENABLED=true 时必须启用 Checkpoint")
+        if failure_enabled and fail_after_node not in _CHECKPOINT_NODES:
+            raise RuntimeError(
+                "FAIL_AFTER_NODE 必须是图节点之一：%s" % ", ".join(sorted(_CHECKPOINT_NODES))
+            )
+
+        return cls(
+            enabled=enabled,
+            backend=backend,
+            db_path=db_path,
+            failure_injection_enabled=failure_enabled,
+            fail_after_node=fail_after_node,
+        )
+
+
 @dataclass(frozen=True)
 class DataSourceConfig:
     """数据源运行配置。"""

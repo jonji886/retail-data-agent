@@ -19,6 +19,22 @@ Render 部署后，进入服务的 **Logs → Application logs**，搜索下面�
 
 日志只输出 `request_id`、`trace_id`、Provider、模型、错误类型、状态、耗时和 Token 统计，不输出问题正文、Prompt、API Key、Authorization、数据库连接串或查询结果。Render 免费实例休眠或重启后，历史日志的保留和检索能力以 Render 当前方案为准；需要长期留存时应接入外部日志系统。
 
+## Durable Checkpoint 运维边界
+
+本地 Durable Demo 的配置为：
+
+```env
+CHECKPOINT_ENABLED=true
+CHECKPOINT_BACKEND=sqlite
+CHECKPOINT_DB_PATH=data/checkpoints.db
+FAILURE_INJECTION_ENABLED=false
+FAIL_AFTER_NODE=execute_skill
+```
+
+`data/checkpoints.db` 及其 WAL 文件属于运行时数据，已加入 `.gitignore`。`inspect` 通过 LangGraph `get_state` / `get_state_history` 查询指定 `thread_id`，不维护第二套状态表。完成态 resume 会直接返回已持久化的最终 State，不会重新执行 Workflow。
+
+SQLite 适合单机 Portfolio / Demo。当前业务 Tool 以只读分析为主；未来有副作用 Tool 时，仍需使用 Idempotency Key / Execution Record 处理“外部副作用已成功但 Checkpoint 尚未提交”的重试窗口。多实例部署应使用共享 Durable Backend，并补充访问控制、加密、生命周期和脱敏策略。
+
 | Failure | Detection | Behaviour | User response | Trace/Audit |
 |---|---|---|---|---|
 | Main timeout / HTTP error | 客户端异常与超时 | 最多重试 `LLM_MAX_RETRIES`（0～2）；仍失败后切换 Reason；Reason 失败才确定性回退 | 优先返回 Main 或 Reason 的成功结果，否则返回规则链路结果 | 记录 role、实际 provider/model、`retry_count`、`fallback_used`、`fallback_from_model`、`fallback_model`、`fallback_reason` 与 `error_category` |

@@ -9,4 +9,6 @@ __pycache__/
 data/generated/*.csv
 data/generated/*.duckdb
 data/*.duckdb
+data/checkpoints*.db
+data/checkpoints*.db-*
 data/runtime/

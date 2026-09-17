@@ -64,7 +64,18 @@ class AgentState(TypedDict, total=False):
     _root: str
     _use_llm: bool
     _llm_mode: str
+    # 仅保留 direct node 调用的兼容读取；正常 Graph 运行不填充连接对象，
+    # 数据源通过 AgentRuntimeContext 传递，避免 Checkpoint 序列化进程资源。
     _data_source: Any
+
+
+class AgentRuntimeContext(TypedDict, total=False):
+    """只在当前进程有效的运行时依赖，不写入 LangGraph Checkpoint。"""
+
+    root: Any
+    use_llm: bool
+    llm_mode: str
+    data_source: Any
 
 
 def new_state(question: str, user_id: str = "user_hq", role: str = "hq_manager",

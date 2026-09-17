@@ -41,6 +41,7 @@ class AgentApplicationService:
         client_ip: str = "",
         quota_bypass: bool = False,
         session_context: Optional[Dict[str, Any]] = None,
+        thread_id: str = "",
     ) -> AgentState:
         started = time.monotonic()
         if use_llm:
@@ -71,11 +72,17 @@ class AgentApplicationService:
                 )
                 return state
         try:
-            state = run_agent(
-                question, self.root, user_id=user_id, role=role, data_scope=data_scope,
-                use_llm=use_llm, data_source=self.data_source,
-                session_context=session_context,
-            )
+            run_kwargs = {
+                "user_id": user_id,
+                "role": role,
+                "data_scope": data_scope,
+                "use_llm": use_llm,
+                "data_source": self.data_source,
+                "session_context": session_context,
+            }
+            if thread_id:
+                run_kwargs["thread_id"] = thread_id
+            state = run_agent(question, self.root, **run_kwargs)
         except Exception as exc:  # noqa: BLE001
             state = new_state(question, user_id=user_id, role=role, data_scope=data_scope)
             datasource_name = getattr(self._data_source, "dialect", "unknown")

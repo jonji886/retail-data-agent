@@ -18,6 +18,7 @@
 - [评测与失败案例](#evaluation)
 - [公网部署](#deployment)
 - [5 分钟体验路径](#demo)
+- [Durable Execution & Failure Recovery](#durable-execution)
 - [本地启动](#quick-start)
 - [能力边界](#limitations)
 - [详细文档](#documentation)
@@ -76,15 +77,15 @@ LLM / 规则理解：查询计划（`intent`、指标、维度、筛选、时间
 ```text
 Status: MVP
 Version: v1.0.0
-Last verified: 2026-09-16
+Last verified: 2026-09-17
 Primary LLM Model: DeepSeek/deepseek-flash
 
 Golden cases: 35
 Evaluation cases: 35
 Demo scenarios: 4
 Web tabs: 3
-Unit test files: 20
-Unit tests: 125
+Unit test files: 22
+Unit tests: 138
 ```
 
 </details>
@@ -268,6 +269,72 @@ python3 scripts/run_model_benchmark.py --providers deepseek,qwen --runs 3
 
 完整演示话术与 4 个场景见 [docs/demo-script.md](docs/demo-script.md)。
 
+<a id="durable-execution"></a>
+
+## Durable Execution & Failure Recovery
+
+### Why
+
+普通 In-Memory Agent 在进程退出后会丢失执行状态；本项目额外提供 LangGraph 官方 SQLite Checkpoint，验证工作流状态可以跨进程恢复：
+
+```text
+In-Memory：Process crash → State lost → Restart from beginning
+
+SQLite：Process crash → State persisted → New process → Same thread_id → Resume
+```
+
+Checkpoint 保存的是 LangGraph 的 Workflow Execution State（问题、Query Plan、权限结果、Skill 结果、校验结果和回答上下文）；Trace 仍是逐节点可观测记录，Audit 仍是 JSONL 审计记录，三者不混为一体。
+
+### Architecture
+
+```text
+User Request
+     ↓
+LangGraph StateGraph
+     ↓
+AgentState + thread_id
+     ↓
+Checkpoint Factory
+     ├── InMemorySaver（默认开发 / 单测）
+     └── SqliteSaver（本地 Durable Demo）
+             ↓
+       data/checkpoints.db
+
+Process Restart + same thread_id
+     ↓
+Load StateSnapshot
+     ↓
+Graph.invoke(None, configurable.thread_id)
+     ↓
+Resume from the next persisted node
+```
+
+当前同步 Graph 使用 `langgraph-checkpoint-sqlite==2.0.11` 提供的 `SqliteSaver`。数据源连接属于当前进程的运行时 context，不会写进 Checkpoint；新进程会重新创建数据源连接。`thread_id` 未显式传入时由 `new_state` 生成；API 和 Application Service 也支持显式传入它。
+
+### Cross-process Demo
+
+```bash
+# 终端 A：parse_request / policy_check / execute_skill 完成后落盘并退出
+DATA_SOURCE=duckdb CHECKPOINT_ENABLED=true CHECKPOINT_BACKEND=sqlite \
+python3 -m scripts.checkpoint_demo start --thread-id retail-demo-001
+
+# 终端 B：这是新的 Python Process / 新 Graph Instance
+DATA_SOURCE=duckdb CHECKPOINT_ENABLED=true CHECKPOINT_BACKEND=sqlite \
+python3 -m scripts.checkpoint_demo resume --thread-id retail-demo-001
+
+# 查看 StateSnapshot 和 LangGraph checkpoint history
+DATA_SOURCE=duckdb CHECKPOINT_ENABLED=true CHECKPOINT_BACKEND=sqlite \
+python3 -m scripts.checkpoint_demo inspect --thread-id retail-demo-001
+```
+
+Demo 的 `start` 使用 `interrupt_after=execute_skill` 作为稳定的 Failure Injection，只在指定安全 checkpoint 边界暂停；正常配置 `FAILURE_INJECTION_ENABLED=false`。恢复后会从 `validate_result` 继续，已完成的 `parse_request`、`policy_check`、`execute_skill` 不会从头重跑。若异常发生在某节点完成但其结果尚未持久化的窗口，该节点仍可能被安全重试；Checkpoint 不承诺具有副作用 Tool 的 Exactly Once。
+
+当前项目的 Tool 主要是只读 SQL / 数据分析，因此本次不引入幂等框架。未来如果增加订单创建、写数据库等副作用 Tool，需要额外设计 Idempotency Key / Execution Record。
+
+### Scope and limitations
+
+SQLite 用于本地 Portfolio / Demo 的低部署成本 Durable Execution 验证，不是多实例生产级共享存储。真实企业环境还需要考虑持久化数据的访问控制、加密、生命周期和脱敏；多实例生产部署应切换到共享的 PostgreSQL 等 Durable Backend。切换时主要修改 [Checkpoint Factory](app/infrastructure/checkpoint/factory.py) 与配置层，Agent 节点和 `thread_id` 协议不需要改变。
+
 <a id="quick-start"></a>
 
 ## 本地启动
@@ -291,6 +358,12 @@ python3 scripts/run_evaluation.py              # DuckDB 确定性回归
 python3 scripts/verify_project_consistency.py
 python3 scripts/smoke_query.py
 
+# SQLite Durable Checkpoint / 跨进程故障恢复 Demo
+DATA_SOURCE=duckdb CHECKPOINT_ENABLED=true CHECKPOINT_BACKEND=sqlite \
+python3 -m scripts.checkpoint_demo start --thread-id retail-demo-001
+DATA_SOURCE=duckdb CHECKPOINT_ENABLED=true CHECKPOINT_BACKEND=sqlite \
+python3 -m scripts.checkpoint_demo resume --thread-id retail-demo-001
+
 # Supabase 真实 LLM 端到端评测（需 DATA_SOURCE=postgresql、DATABASE_URL、所选 Provider 的 API Key）
 EVAL_LLM_MODEL=<固定模型> python3 scripts/run_llm_evaluation.py
 python3 scripts/run_model_benchmark.py --providers current,qwen --runs 1
@@ -305,6 +378,7 @@ python3 scripts/run_model_benchmark.py --providers current,qwen --runs 1
 - 归因结果是数据贡献，不自动证明业务因果；管理者应结合促销、库存、客流等外部事实复核。
 - AI 分析助手已支持推荐追问按钮自动执行；贡献因素点击下钻与跨图表联动仍未实现，详见 [decision-support-ui.md](docs/decision-support-ui.md)。
 - Render 免费方案仅适合演示/低流量验证，不提供高可用、持久化审计或分布式配额。
+- SQLite Checkpoint 只用于本地 Portfolio / Demo；它解决 Workflow State Recovery，不替代多实例生产所需的共享存储、加密、数据生命周期与副作用操作幂等保障。
 
 <a id="documentation"></a>
 

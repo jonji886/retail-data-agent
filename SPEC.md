@@ -3,7 +3,7 @@
 ```
 Status: MVP
 Version: v1.0.0
-Last verified: 2026-09-16
+Last verified: 2026-09-17
 ```
 
 > 本文件描述当前已实现的 MVP 产品范围与验收标准，与 README / 代码 / 评测报告保持一致。
@@ -97,6 +97,13 @@ Last verified: 2026-09-16
 
 - DuckDB 与 PostgreSQL 使用一致的固定种子零售数据，覆盖 2024～2025 年；Hero Scenario 已完成两数据源结果一致性验证。
 
+### 4.9 Durable Execution（LangGraph Checkpoint）
+
+- Checkpoint 通过统一 Factory 选择 `InMemorySaver` 或 LangGraph 官方 `SqliteSaver`，默认配置保持 memory；SQLite 由 `CHECKPOINT_DB_PATH` 指定并自动创建目录。
+- Graph 调用统一使用稳定 `thread_id`；API、Application Service 和直接 Agent 入口均支持传入该标识。
+- `scripts.checkpoint_demo` 通过真实的新 Python Process / 新 Graph Instance 演示暂停、StateSnapshot 检查和 resume；检查能力复用 LangGraph `get_state` / `get_state_history`，不创建第二套历史表。
+- Failure Injection 默认关闭，仅用于 Demo / Test 的 `interrupt_after` 安全 checkpoint 边界；当前业务 Tool 主要为只读分析。
+
 ## 5. Non-goals（当前 MVP 明确不做）
 
 - MySQL / ClickHouse 等未实现的数据源；
@@ -119,6 +126,7 @@ Last verified: 2026-09-16
 - [x] SQL 结果行数、memory limit 与 threads 有明确默认上限。
 - [x] PostgreSQL 使用同一 SQL Guard、连接池、连接/语句超时和结果行数限制。
 - [x] Demo quota 在 LLM 调用前生效，Evaluation 直连 Agent Runtime 不受影响。
+- [x] LangGraph Workflow State 可通过 SQLite Checkpoint 跨进程恢复；副作用 Tool 的 Exactly Once 不在本次范围内。
 
 ## 7. Evaluation Requirements
 
@@ -134,7 +142,7 @@ Last verified: 2026-09-16
 2. `Golden Dataset 数量（35）== README 描述 == 评测报告 total`；
 3. `Web Demo Tab 数量（6）== README 描述 == web_app.py 实际`；
 4. `Overall Pass Rate` 与 `Executable Success Rate` 口径可解释、不冲突；
-5. 全部单元测试通过（当前 20 文件 / 123 用例）；
+5. 全部单元测试通过（当前 22 文件 / 138 用例）；
 6. 任何指标或能力声明都能在代码 / 测试 / 报告中找到证据。
 
 ## 9. Future（Out of Scope，未实现不宣传）

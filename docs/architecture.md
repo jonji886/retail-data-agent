@@ -13,6 +13,20 @@ LangGraph 提供：
 
 不使用 LangGraph 的 Agent / Tool calling 等高级抽象，仅用 StateGraph 作为轻量 Runtime，保持可控与可测试。
 
+## 1.1 Durable Execution / Failure Recovery
+
+当前同步 StateGraph 通过 `app/infrastructure/checkpoint/factory.py` 选择 LangGraph 官方 Checkpointer：开发和单测使用 `InMemorySaver`，本地 Durable Demo 使用 `langgraph-checkpoint-sqlite==2.0.11` 的 `SqliteSaver`。Graph 调用统一将 `thread_id` 放入：
+
+```python
+{"configurable": {"thread_id": thread_id}}
+```
+
+Agent State 是 Workflow Execution State；Trace 仍记录逐节点事件，Audit 仍写入 JSONL。数据源连接不放入 State，而作为当前进程的 LangGraph runtime context 传给需要执行查询的节点，因此新进程只需重新创建数据源即可读取旧 State 并 resume。
+
+`scripts.checkpoint_demo` 使用 `interrupt_after=execute_skill` 在真实 checkpoint 边界暂停，进程 A 结束后，进程 B 创建新的 Graph 并调用 `invoke(None, config)`，从 `validate_result` 继续。通过 `get_state` / `get_state_history` 直接查看 LangGraph 的 StateSnapshot，不额外创建 checkpoint history 表。
+
+SQLite 是本地 Portfolio / Demo 的低成本验证方案，不是多实例生产共享存储。未来切换 PostgreSQL 等后端时，保留 `thread_id` 和 Graph 协议，只替换 Checkpoint Factory 与配置；业务节点无需感知存储类型。
+
 ## 2. 为什么不让 LLM 直接调用数据库
 
 直接让 LLM 生成并执行 SQL 会带来：

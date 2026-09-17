@@ -12,9 +12,11 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+from langgraph.runtime import Runtime
+
 from app.agent.contracts import ErrorType, Intent, QueryPlan
 from app.agent.nlq import NLQError, NaturalLanguageQueryEngine
-from app.agent.state import AgentState
+from app.agent.state import AgentRuntimeContext, AgentState
 from app.llm.telemetry import call_records, deterministic_fallback_record
 from app.tools.metadata import MetadataTool
 
@@ -73,7 +75,10 @@ def _resolve_region(filters: Dict[str, str]) -> Optional[str]:
 # 节点实现
 # ---------------------------------------------------------------------------
 
-def parse_request(state: AgentState) -> AgentState:
+def parse_request(
+    state: AgentState,
+    runtime: Optional[Runtime[AgentRuntimeContext]] = None,
+) -> AgentState:
     """解析用户问题为 intent + QueryPlan。
 
     支持两条链路：
@@ -89,7 +94,8 @@ def parse_request(state: AgentState) -> AgentState:
     started = time.monotonic()
     question = state.get("question", "")
 
-    data_source = state.get("_data_source")
+    runtime_context = (runtime.context or {}) if runtime else {}
+    data_source = runtime_context.get("data_source") or state.get("_data_source")
     engine = NaturalLanguageQueryEngine(root, data_source=data_source)
     question = _contextualize_follow_up(question, state.get("session_context", {}), engine)
     use_llm = state.get("_use_llm", False)  # type: ignore[assignment]

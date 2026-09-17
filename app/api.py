@@ -23,6 +23,7 @@ class QueryRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     use_llm: bool = True
     session_id: str = ""
+    thread_id: str = ""
 
 
 def _response(state: Dict[str, Any], started: float) -> Dict[str, Any]:
@@ -63,6 +64,7 @@ def query(payload: QueryRequest, request: Request) -> Dict[str, Any]:
     state = service.query(
         payload.question, user_id=payload.user_id, use_llm=payload.use_llm,
         session_id=payload.session_id or payload.user_id, client_ip=client_ip,
+        thread_id=payload.thread_id,
     )
     response = _response(state, started)
     log_event(

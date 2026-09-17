@@ -7,14 +7,19 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+from langgraph.runtime import Runtime
 
 from app.agent.contracts import ErrorType, QueryPlan
-from app.agent.state import AgentState
+from app.agent.state import AgentRuntimeContext, AgentState
 from app.skills.registry import get_skill
 
 
-def execute_skill(state: AgentState) -> AgentState:
+def execute_skill(
+    state: AgentState,
+    runtime: Optional[Runtime[AgentRuntimeContext]] = None,
+) -> AgentState:
     root = Path(state.get("_root", "."))  # type: ignore[arg-type]
     trace_id = state.get("trace_id", "")
     started = time.monotonic()
@@ -24,6 +29,8 @@ def execute_skill(state: AgentState) -> AgentState:
     events = list(state.get("trace_events", []))
     tool_calls = list(state.get("tool_calls", []))
     tool_results = list(state.get("tool_results", []))
+    runtime_context = (runtime.context or {}) if runtime else {}
+    data_source = runtime_context.get("data_source") or state.get("_data_source")
 
     if not intent:
         return {
@@ -40,7 +47,7 @@ def execute_skill(state: AgentState) -> AgentState:
             "authorized_filters": dict(authorized_filters),
             "user_id": state.get("user_id", "user_hq"),
             "role": state.get("role", "hq_manager"),
-            "data_source": state.get("_data_source"),
+            "data_source": data_source,
         }
         result = skill(plan, context)
     except KeyError as exc:
