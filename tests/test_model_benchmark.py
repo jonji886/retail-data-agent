@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from app.llm.pricing import estimate_cost, estimate_tokens
 from app.llm.siliconflow_client import ModelConfig, OpenAICompatibleClient

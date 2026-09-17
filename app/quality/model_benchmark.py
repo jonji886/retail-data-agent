@@ -6,7 +6,7 @@ import json
 import math
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Sequence
+from typing import Any, Dict, List, Mapping, Sequence
 
 
 def percentile(values: Sequence[float], quantile: float) -> float | None:

@@ -12,8 +12,6 @@ from app.agent.nlq import DateRange, NLQError, NaturalLanguageQueryEngine, Parse
 from app.data_sources.base import DataSourceBase
 from app.domain.time_range import resolve_relative_time
 from app.llm.siliconflow_client import (
-    SiliconFlowClient,
-    SiliconFlowConfig,
     create_model_client,
     create_model_config,
 )
