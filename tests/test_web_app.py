@@ -51,7 +51,10 @@ class WebAppInteractionTest(unittest.TestCase):
     def test_disabled_model_click_uses_deterministic_path(self) -> None:
         with patch.dict(os.environ, self.TEST_ENV):
             app = self.make_app()
-            app.checkbox[0].set_value(False)
+            # 未配置主模型时复选框禁用且默认关闭；新版 AppTest 禁止与 disabled 控件交互
+            self.assertTrue(app.checkbox[0].disabled)
+            self.assertFalse(app.checkbox[0].value)
+            app.button[0].click()
             app.button[0].click()
             app.run()
             self.assert_no_exceptions(app)
